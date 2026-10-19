@@ -86,9 +86,12 @@ public class IdempotencyService {
                     bodyJson,
                     Instant.now().plus(Duration.ofDays(1))
             );
-            idempotencyRecordRepository.save(record);
+            idempotencyRecordRepository.saveAndFlush(record);
         } catch (DataIntegrityViolationException ex) {
             log.info("Concurrent idempotency record insertion detected for key {}", key);
+            throw new IdempotencyConflictException(
+                    String.format("Concurrent duplicate request detected for idempotency key '%s'", key)
+            );
         } catch (Exception e) {
             log.warn("Failed to record idempotency for key {}", key, e);
         }

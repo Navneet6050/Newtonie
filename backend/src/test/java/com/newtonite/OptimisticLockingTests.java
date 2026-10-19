@@ -127,4 +127,105 @@ public class OptimisticLockingTests {
         assertThat(activityLogs.size()).isEqualTo(2); // 1 CREATED + 1 TITLE_CHANGED
         assertThat(activityLogs.get(0).get("toValue").asText()).isEqualTo("Client A Successful Title Update");
     }
+
+    @Test
+    @DisplayName("Precondition conflict: When If-Match header and expectedVersion in body disagree, return 409 Conflict")
+    void testIfMatchAndExpectedVersionDisagreeRejection() throws Exception {
+        CreateWorkItemRequest request = new CreateWorkItemRequest(
+                "Contradictory Precondition Test Item",
+                "Testing disagreeing version preconditions",
+                WorkItemType.TASK,
+                WorkItemPriority.MEDIUM,
+                "Core Engine",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+
+        MvcResult createResult = mockMvc.perform(post("/api/work-items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        // Submit update with If-Match: "0" but expectedVersion: 5
+        UpdateWorkItemRequest disagreeReq = new UpdateWorkItemRequest();
+        disagreeReq.setTitle("Contradictory Title Update");
+        disagreeReq.setExpectedVersion(5L);
+
+        mockMvc.perform(patch("/api/work-items/" + id)
+                        .header("If-Match", "0")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(disagreeReq)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.message").value(containsString("disagree")));
+    }
+
+    @Test
+    @DisplayName("Malformed If-Match header returns 400 Bad Request")
+    void testMalformedIfMatchHeaderReturns400() throws Exception {
+        UUID randomId = UUID.randomUUID();
+        UpdateWorkItemRequest req = new UpdateWorkItemRequest();
+        req.setTitle("New Title");
+
+        mockMvc.perform(patch("/api/work-items/" + randomId)
+                        .header("If-Match", "invalid-non-numeric")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(containsString("Malformed If-Match header")));
+    }
+
+    @Test
+    @DisplayName("Weak ETag in If-Match header returns 400 Bad Request per RFC 7232 §3.1")
+    void testWeakETagIfMatchHeaderReturns400() throws Exception {
+        UUID randomId = UUID.randomUUID();
+        UpdateWorkItemRequest req = new UpdateWorkItemRequest();
+        req.setTitle("New Title");
+
+        mockMvc.perform(patch("/api/work-items/" + randomId)
+                        .header("If-Match", "W/\"0\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value(containsString("Weak ETags")));
+    }
+
+    @Test
+    @DisplayName("Wildcard '*' in If-Match header succeeds on existing resource")
+    void testWildcardIfMatchHeaderSucceeds() throws Exception {
+        CreateWorkItemRequest request = new CreateWorkItemRequest(
+                "Wildcard Precondition Test Item",
+                "Testing If-Match: * wildcard support",
+                WorkItemType.BUG,
+                WorkItemPriority.LOW,
+                "Telemetry",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+
+        MvcResult createResult = mockMvc.perform(post("/api/work-items")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(request)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String id = objectMapper.readTree(createResult.getResponse().getContentAsString()).get("id").asText();
+
+        UpdateWorkItemRequest wildcardReq = new UpdateWorkItemRequest();
+        wildcardReq.setTitle("Updated Title with Wildcard If-Match");
+
+        mockMvc.perform(patch("/api/work-items/" + id)
+                        .header("If-Match", "*")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(wildcardReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("Updated Title with Wildcard If-Match"));
+    }
 }

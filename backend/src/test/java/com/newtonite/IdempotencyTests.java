@@ -106,4 +106,76 @@ public class IdempotencyTests {
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value(containsString("previously used with a different request payload")));
     }
+
+    @Test
+    @DisplayName("Simultaneous duplicate creation requests with identical key never create duplicate work items or return 500")
+    void testSimultaneousDuplicateCreateRequests() throws Exception {
+        String sharedKey = "simultaneous-key-" + UUID.randomUUID();
+
+        CreateWorkItemRequest payload = new CreateWorkItemRequest(
+                "Simultaneous Idempotency Race Test Item",
+                "Testing concurrent identical submissions",
+                WorkItemType.TASK,
+                WorkItemPriority.HIGH,
+                "Core Engine",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+
+        int threadCount = 2;
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(threadCount);
+        java.util.concurrent.CountDownLatch readyLatch = new java.util.concurrent.CountDownLatch(threadCount);
+        java.util.concurrent.CountDownLatch startLatch = new java.util.concurrent.CountDownLatch(1);
+
+        java.util.List<Integer> statuses = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+        java.util.List<String> bodies = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                readyLatch.countDown();
+                try {
+                    startLatch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                    MvcResult res = mockMvc.perform(post("/api/work-items")
+                                    .header("Idempotency-Key", sharedKey)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(objectMapper.writeValueAsString(payload)))
+                            .andReturn();
+                    statuses.add(res.getResponse().getStatus());
+                    bodies.add(res.getResponse().getContentAsString());
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        }
+
+        readyLatch.await(5, java.util.concurrent.TimeUnit.SECONDS);
+        startLatch.countDown();
+
+        executor.shutdown();
+        executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS);
+
+        // Neither request must ever receive an unhandled 500 Internal Server Error
+        assertThat(statuses).allMatch(s -> s == 201 || s == 409);
+        assertThat(statuses).contains(201); // At least one succeeded
+
+        // Extract the created ID
+        String createdId = null;
+        for (String body : bodies) {
+            JsonNode node = objectMapper.readTree(body);
+            if (node.has("id")) {
+                createdId = node.get("id").asText();
+                break;
+            }
+        }
+        assertThat(createdId).isNotNull();
+
+        // Verify only 1 CREATED activity log was committed
+        MvcResult activityResult = mockMvc.perform(get("/api/work-items/" + createdId + "/activity"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode logs = objectMapper.readTree(activityResult.getResponse().getContentAsString()).get("content");
+        assertThat(logs.size()).isEqualTo(1);
+        assertThat(logs.get(0).get("actionType").asText()).isEqualTo("CREATED");
+    }
 }

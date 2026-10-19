@@ -82,17 +82,64 @@ public class WorkItemController {
             @RequestBody UpdateWorkItemRequest request,
             @RequestHeader(value = "If-Match", required = false) String ifMatchHeader) {
 
-        if (ifMatchHeader != null && !ifMatchHeader.isBlank() && !request.isPresent("expectedVersion")) {
-            try {
-                String cleanHeader = ifMatchHeader.replace("\"", "").trim();
-                request.setExpectedVersion(Long.parseLong(cleanHeader));
-            } catch (NumberFormatException ignored) {
-                // If header is not a valid number, let the version check handle it or proceed with body version
-            }
-        }
+        applyIfMatchPrecondition(ifMatchHeader, request);
 
         WorkItemResponse updated = workItemService.updateWorkItem(id, request);
         return ResponseEntity.ok(updated);
+    }
+
+    /**
+     * Parses and applies the HTTP If-Match header precondition.
+     * Supported syntax:
+     * - Strong numeric entity tags: e.g. "0", 0, "1", 1
+     * - Wildcard '*': asserts resource existence without restricting version
+     * Unsupported / rejected syntax:
+     * - Weak ETags (W/...): rejected with 400 Bad Request per RFC 7232 §3.1
+     * - Non-numeric or negative values: rejected with 400 Bad Request
+     * - Disagreement between If-Match and body expectedVersion: rejected with 409 Conflict
+     */
+    private void applyIfMatchPrecondition(String ifMatchHeader, UpdateWorkItemRequest request) {
+        if (ifMatchHeader == null || ifMatchHeader.isBlank()) {
+            return;
+        }
+
+        String trimmed = ifMatchHeader.trim();
+
+        // Weak ETags are explicitly disallowed for state-modifying conditional updates per RFC 7232 §3.1
+        if (trimmed.startsWith("W/") || trimmed.startsWith("w/")) {
+            throw new IllegalArgumentException(
+                    "Weak ETags (W/...) are not supported for If-Match concurrency preconditions; provide a strong numeric entity tag (e.g. \"0\")"
+            );
+        }
+
+        // Wildcard '*' asserts the resource exists; it does not restrict to a specific version
+        if ("*".equals(trimmed)) {
+            return;
+        }
+
+        String cleanHeader = trimmed.replace("\"", "").trim();
+        long headerVersion;
+        try {
+            headerVersion = Long.parseLong(cleanHeader);
+            if (headerVersion < 0) {
+                throw new IllegalArgumentException("If-Match version must be non-negative: " + ifMatchHeader);
+            }
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "Malformed If-Match header: '" + ifMatchHeader + "'. Expected a numeric version (e.g. \"0\") or wildcard '*'"
+            );
+        }
+
+        if (request.isPresent("expectedVersion") && request.getExpectedVersion() != null) {
+            if (!request.getExpectedVersion().equals(headerVersion)) {
+                throw new com.newtonite.common.error.StaleVersionConflictException(String.format(
+                        "Version precondition conflict: If-Match header (%d) and expectedVersion in body (%d) disagree",
+                        headerVersion, request.getExpectedVersion()
+                ));
+            }
+        } else {
+            request.setExpectedVersion(headerVersion);
+        }
     }
 
     @PostMapping("/{id}/claim")
