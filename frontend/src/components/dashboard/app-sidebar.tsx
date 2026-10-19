@@ -14,6 +14,7 @@ import {
   X,
   Briefcase,
   Check,
+  LogIn,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import {
@@ -25,6 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 
 export type NavItemKey =
   | "overview"
@@ -56,6 +58,7 @@ export function AppSidebar({
   currentWorkspace = "Acme Studio",
   onWorkspaceChange,
 }: AppSidebarProps) {
+  const { user, logout, setShowLoginModal, isAuthenticated } = useAuth()
   const [internalWorkspace, setInternalWorkspace] = React.useState("Acme Studio")
   const activeWorkspace = onWorkspaceChange ? currentWorkspace : internalWorkspace
 
@@ -319,62 +322,79 @@ export function AppSidebar({
             <span>Settings</span>
           </button>
 
-          {/* User Profile for Alex Morgan */}
+          {/* User Profile */}
           <div className="pt-1">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button
-                  type="button"
-                  className="flex w-full items-center justify-between rounded-lg p-2 text-left transition-colors hover:bg-white/[0.04] focus-visible:border-indigo-500/60 focus-visible:ring-2 focus-visible:ring-indigo-500/30 outline-none"
-                  aria-label="Alex Morgan, Workspace Admin profile settings"
+            {isAuthenticated && user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-between rounded-lg p-2 text-left transition-colors hover:bg-white/[0.04] focus-visible:border-indigo-500/60 focus-visible:ring-2 focus-visible:ring-indigo-500/30 outline-none cursor-pointer"
+                    aria-label={`${user.name}, profile settings`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative">
+                        <Avatar size="sm" className="size-8 border border-white/[0.1]">
+                          <AvatarFallback className="bg-indigo-950/80 text-indigo-200 font-semibold text-xs border border-indigo-500/30">
+                            {user.avatarInitials || user.name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span
+                          className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-[#0b0b0e]"
+                          title="Active / Online"
+                          aria-hidden="true"
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="text-xs font-medium text-zinc-200 truncate">
+                          {user.name}
+                        </div>
+                        <div className="text-[10px] text-zinc-400 truncate">
+                          {user.systemRole === "ADMIN" ? "System Admin" : "Team Member"}
+                        </div>
+                      </div>
+                    </div>
+                    <MoreVertical className="size-3.5 shrink-0 text-zinc-400" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-52 border-white/[0.08] bg-[#141418] text-zinc-200"
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="relative">
-                      <Avatar size="sm" className="size-8 border border-white/[0.1]">
-                        <AvatarFallback className="bg-indigo-950/80 text-indigo-200 font-semibold text-xs border border-indigo-500/30">
-                          AM
-                        </AvatarFallback>
-                      </Avatar>
-                      <span
-                        className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-[#0b0b0e]"
-                        title="Active / Online"
-                        aria-hidden="true"
-                      />
+                  <DropdownMenuLabel>
+                    <div className="text-xs font-medium text-zinc-200">{user.name}</div>
+                    <div className="text-[10px] text-zinc-400">{user.email}</div>
+                    <div className="mt-1 text-[9px] font-mono text-indigo-400 uppercase">
+                      {user.systemRole}
                     </div>
-                    <div className="min-w-0">
-                      <div className="text-xs font-medium text-zinc-200 truncate">
-                        Alex Morgan
-                      </div>
-                      <div className="text-[10px] text-zinc-400 truncate">
-                        Workspace Admin
-                      </div>
-                    </div>
-                  </div>
-                  <MoreVertical className="size-3.5 shrink-0 text-zinc-400" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                className="w-52 border-white/[0.08] bg-[#141418] text-zinc-200"
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-white/[0.06]" />
+                  <DropdownMenuItem
+                    onClick={() => setShowLoginModal(true)}
+                    className="text-xs cursor-pointer hover:bg-white/[0.05]"
+                  >
+                    Switch Operator
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-white/[0.06]" />
+                  <DropdownMenuItem
+                    onClick={logout}
+                    className="text-xs cursor-pointer text-rose-400 hover:bg-rose-500/10"
+                  >
+                    <LogOut className="mr-2 size-3.5" />
+                    Sign Out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLoginModal(true)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-2 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors cursor-pointer"
               >
-                <DropdownMenuLabel>
-                  <div className="text-xs font-medium text-zinc-200">Alex Morgan</div>
-                  <div className="text-[10px] text-zinc-400">alex.morgan@acme.internal</div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator className="bg-white/[0.06]" />
-                <DropdownMenuItem className="text-xs cursor-pointer hover:bg-white/[0.05]">
-                  Status: Available
-                </DropdownMenuItem>
-                <DropdownMenuItem className="text-xs cursor-pointer hover:bg-white/[0.05]">
-                  Preferences
-                </DropdownMenuItem>
-                <DropdownMenuSeparator className="bg-white/[0.06]" />
-                <DropdownMenuItem className="text-xs cursor-pointer text-rose-400 hover:bg-rose-500/10">
-                  <LogOut className="mr-2 size-3.5" />
-                  Sign Out
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                <LogIn className="size-3.5" />
+                Sign In
+              </button>
+            )}
           </div>
         </div>
       </aside>

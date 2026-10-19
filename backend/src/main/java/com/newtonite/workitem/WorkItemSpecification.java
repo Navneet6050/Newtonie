@@ -15,6 +15,7 @@ public class WorkItemSpecification {
             WorkItemPriority priority,
             WorkItemType type,
             UUID teamId,
+            List<UUID> allowedTeamIds,
             UUID assigneeId,
             String systemArea) {
 
@@ -43,6 +44,12 @@ public class WorkItemSpecification {
 
             if (teamId != null) {
                 predicates.add(cb.equal(root.get("team").get("id"), teamId));
+            } else if (allowedTeamIds != null) {
+                if (allowedTeamIds.isEmpty()) {
+                    predicates.add(cb.disjunction());
+                } else {
+                    predicates.add(root.get("team").get("id").in(allowedTeamIds));
+                }
             }
 
             if (assigneeId != null) {

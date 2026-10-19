@@ -3,14 +3,21 @@ package com.newtonite.activity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
+import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
 
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 @Entity
 @Table(name = "idempotency_records")
+@IdClass(IdempotencyRecordId.class)
 public class IdempotencyRecord {
+
+    @Id
+    @Column(name = "user_id", nullable = false)
+    private UUID userId;
 
     @Id
     @Column(nullable = false, length = 255)
@@ -37,7 +44,8 @@ public class IdempotencyRecord {
     public IdempotencyRecord() {
     }
 
-    public IdempotencyRecord(String key, String endpoint, String requestHash, int statusCode, String responseBody, Instant expiresAt) {
+    public IdempotencyRecord(UUID userId, String key, String endpoint, String requestHash, int statusCode, String responseBody, Instant expiresAt) {
+        this.userId = userId;
         this.key = key;
         this.endpoint = endpoint;
         this.requestHash = requestHash;
@@ -45,6 +53,14 @@ public class IdempotencyRecord {
         this.responseBody = responseBody;
         this.createdAt = Instant.now();
         this.expiresAt = expiresAt;
+    }
+
+    public UUID getUserId() {
+        return userId;
+    }
+
+    public void setUserId(UUID userId) {
+        this.userId = userId;
     }
 
     public String getKey() {
@@ -108,11 +124,11 @@ public class IdempotencyRecord {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         IdempotencyRecord that = (IdempotencyRecord) o;
-        return Objects.equals(key, that.key);
+        return Objects.equals(userId, that.userId) && Objects.equals(key, that.key);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(key);
+        return Objects.hash(userId, key);
     }
 }

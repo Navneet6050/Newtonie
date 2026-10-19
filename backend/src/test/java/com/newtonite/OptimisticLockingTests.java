@@ -30,10 +30,25 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 public class OptimisticLockingTests {
 
     @Autowired
+    private org.springframework.web.context.WebApplicationContext context;
+
+    @Autowired
+    private com.newtonite.support.TestTokenProvider tokenProvider;
+
     private MockMvc mockMvc;
 
     @Autowired
     private ObjectMapper objectMapper;
+
+    @org.junit.jupiter.api.BeforeEach
+    void setup() {
+        this.mockMvc = org.springframework.test.web.servlet.setup.MockMvcBuilders
+                .webAppContextSetup(context)
+                .apply(org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity())
+                .defaultRequest(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/")
+                        .header("Authorization", tokenProvider.alexMorganToken()))
+                .build();
+    }
 
     private static final UUID TEAM_ACME_STUDIO_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 

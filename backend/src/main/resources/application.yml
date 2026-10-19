@@ -43,3 +43,9 @@ management:
 
 cors:
   allowed-origin: ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
+
+security:
+  jwt:
+    secret: ${JWT_SECRET:newtonite-insecure-development-jwt-secret-key-32bytes-long-for-hmac-sha256}
+    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+

@@ -8,6 +8,8 @@ import com.newtonite.common.error.ResourceNotFoundException;
 import com.newtonite.common.error.StaleVersionConflictException;
 import com.newtonite.common.identity.CurrentUserProvider;
 import com.newtonite.team.Team;
+import com.newtonite.team.TeamMembership;
+import com.newtonite.team.TeamMembershipRepository;
 import com.newtonite.team.TeamRepository;
 import com.newtonite.team.User;
 import com.newtonite.team.UserRepository;
@@ -18,10 +20,12 @@ import com.newtonite.workitem.dto.WorkItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +36,7 @@ public class WorkItemService {
     private final WorkItemRepository workItemRepository;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
+    private final TeamMembershipRepository teamMembershipRepository;
     private final ActivityLogService activityLogService;
     private final IdempotencyService idempotencyService;
     private final CurrentUserProvider currentUserProvider;
@@ -40,41 +45,70 @@ public class WorkItemService {
             WorkItemRepository workItemRepository,
             TeamRepository teamRepository,
             UserRepository userRepository,
+            TeamMembershipRepository teamMembershipRepository,
             ActivityLogService activityLogService,
             IdempotencyService idempotencyService,
             CurrentUserProvider currentUserProvider) {
         this.workItemRepository = workItemRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
+        this.teamMembershipRepository = teamMembershipRepository;
         this.activityLogService = activityLogService;
         this.idempotencyService = idempotencyService;
         this.currentUserProvider = currentUserProvider;
     }
 
+    private boolean isAdmin(User user) {
+        return user != null && "ADMIN".equalsIgnoreCase(user.getSystemRole());
+    }
+
+    private void checkTeamAccess(UUID teamId, User user) {
+        if (!isAdmin(user)) {
+            if (teamId == null || !teamMembershipRepository.existsByTeamIdAndUserId(teamId, user.getId())) {
+                throw new AccessDeniedException("Access denied: user is not an authorized member of team " + teamId);
+            }
+        }
+    }
+
+    private void checkAssigneeTeamMembership(UUID teamId, User assignee) {
+        if (assignee != null && teamId != null) {
+            if (!teamMembershipRepository.existsByTeamIdAndUserId(teamId, assignee.getId())) {
+                throw new IllegalArgumentException(String.format(
+                        "Assignee '%s' is not a member of the work item's team",
+                        assignee.getName()
+                ));
+            }
+        }
+    }
+
     @Transactional
     public WorkItemResponse createWorkItem(CreateWorkItemRequest request, String idempotencyKey) {
+        User actor = currentUserProvider.getCurrentUser();
+
         String requestHash = null;
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             requestHash = idempotencyService.computePayloadHash(request);
-            Optional<WorkItemResponse> cached = idempotencyService.getCachedResponse(idempotencyKey, requestHash);
+            Optional<WorkItemResponse> cached = idempotencyService.getCachedResponse(actor.getId(), idempotencyKey, requestHash);
             if (cached.isPresent()) {
                 return cached.get();
             }
         }
 
-        Team team = null;
-        if (request.teamId() != null) {
-            team = teamRepository.findById(request.teamId())
-                    .orElseThrow(() -> new IllegalArgumentException("Referenced team not found with ID: " + request.teamId()));
+        if (request.teamId() == null) {
+            throw new IllegalArgumentException("Team ID is required to create a work item");
         }
+
+        Team team = teamRepository.findById(request.teamId())
+                .orElseThrow(() -> new IllegalArgumentException("Referenced team not found with ID: " + request.teamId()));
+
+        checkTeamAccess(team.getId(), actor);
 
         User assignee = null;
         if (request.assigneeId() != null) {
             assignee = userRepository.findById(request.assigneeId())
                     .orElseThrow(() -> new IllegalArgumentException("Referenced assignee user not found with ID: " + request.assigneeId()));
+            checkAssigneeTeamMembership(team.getId(), assignee);
         }
-
-        User reporter = currentUserProvider.getCurrentUser();
 
         Long nextSeq = workItemRepository.getNextTrackingSequenceValue();
         String trackingNumber = String.format("NEW-%d", nextSeq != null ? nextSeq : 1000L);
@@ -90,7 +124,7 @@ public class WorkItemService {
                 request.systemArea().trim(),
                 team,
                 assignee,
-                reporter,
+                actor,
                 request.dueDate()
         );
 
@@ -98,7 +132,7 @@ public class WorkItemService {
 
         activityLogService.logActivity(
                 saved,
-                reporter,
+                actor,
                 "CREATED",
                 null,
                 null,
@@ -109,7 +143,7 @@ public class WorkItemService {
         WorkItemResponse response = WorkItemResponse.from(saved);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank() && requestHash != null) {
-            idempotencyService.recordSuccess(idempotencyKey, "/api/work-items", requestHash, 201, response);
+            idempotencyService.recordSuccess(actor.getId(), idempotencyKey, "/api/work-items", requestHash, 201, response);
         }
 
         return response;
@@ -119,6 +153,14 @@ public class WorkItemService {
     public WorkItemResponse getWorkItem(UUID id) {
         WorkItem workItem = workItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Work item not found with ID: " + id));
+
+        User actor = currentUserProvider.getCurrentUser();
+        if (workItem.getTeam() != null) {
+            checkTeamAccess(workItem.getTeam().getId(), actor);
+        } else if (!isAdmin(actor)) {
+            throw new AccessDeniedException("Access denied: work item has no associated team");
+        }
+
         return WorkItemResponse.from(workItem);
     }
 
@@ -133,8 +175,24 @@ public class WorkItemService {
             String systemArea,
             Pageable pageable) {
 
+        User actor = currentUserProvider.getCurrentUser();
+        List<UUID> allowedTeamIds = null;
+
+        if (!isAdmin(actor)) {
+            List<TeamMembership> memberships = teamMembershipRepository.findByUserId(actor.getId());
+            List<UUID> userTeamIds = memberships.stream().map(m -> m.getTeam().getId()).toList();
+
+            if (teamId != null) {
+                if (!userTeamIds.contains(teamId)) {
+                    throw new AccessDeniedException("Access denied: user is not a member of team " + teamId);
+                }
+            } else {
+                allowedTeamIds = userTeamIds;
+            }
+        }
+
         Specification<WorkItem> spec = WorkItemSpecification.filterBy(
-                search, status, priority, type, teamId, assigneeId, systemArea
+                search, status, priority, type, teamId, allowedTeamIds, assigneeId, systemArea
         );
 
         Page<WorkItem> page = workItemRepository.findAll(spec, pageable);
@@ -146,6 +204,13 @@ public class WorkItemService {
         WorkItem item = workItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Work item not found with ID: " + id));
 
+        User actor = currentUserProvider.getCurrentUser();
+        if (item.getTeam() != null) {
+            checkTeamAccess(item.getTeam().getId(), actor);
+        } else if (!isAdmin(actor)) {
+            throw new AccessDeniedException("Access denied: work item has no associated team");
+        }
+
         // Optimistic locking verification: enforce version precondition if supplied
         if (request.isPresent("expectedVersion") && request.getExpectedVersion() != null) {
             if (!item.getVersion().equals(request.getExpectedVersion())) {
@@ -155,8 +220,6 @@ public class WorkItemService {
                 ));
             }
         }
-
-        User actor = currentUserProvider.getCurrentUser();
 
         if (request.isPresent("title") && request.getTitle() != null && !request.getTitle().isBlank()) {
             String newTitle = request.getTitle().trim();
@@ -212,6 +275,9 @@ public class WorkItemService {
                 if (newAssigneeId != null) {
                     newAssignee = userRepository.findById(newAssigneeId)
                             .orElseThrow(() -> new IllegalArgumentException("Referenced assignee user not found with ID: " + newAssigneeId));
+                    if (item.getTeam() != null) {
+                        checkAssigneeTeamMembership(item.getTeam().getId(), newAssignee);
+                    }
                 }
                 String fromVal = oldAssignee != null ? oldAssignee.getName() : "UNASSIGNED";
                 String toVal = newAssignee != null ? newAssignee.getName() : "UNASSIGNED";
@@ -248,6 +314,13 @@ public class WorkItemService {
         WorkItem item = workItemRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Work item not found with ID: " + id));
 
+        User actor = currentUserProvider.getCurrentUser();
+        if (item.getTeam() != null) {
+            checkTeamAccess(item.getTeam().getId(), actor);
+        } else if (!isAdmin(actor)) {
+            throw new AccessDeniedException("Access denied: cannot claim work item without team membership");
+        }
+
         if (item.getAssignee() != null) {
             throw new ClaimConflictException(String.format(
                     "Work item %s is already assigned to %s",
@@ -255,15 +328,13 @@ public class WorkItemService {
             ));
         }
 
-        User actor = currentUserProvider.getCurrentUser();
-
         // Database-level atomic update with WHERE assignee IS NULL
         int affectedRows = workItemRepository.claimWorkItemAtomically(id, actor, Instant.now());
         if (affectedRows == 0) {
             throw new ClaimConflictException(String.format(
                     "Work item %s was concurrently claimed by another user",
                     item.getTrackingNumber()
-            ));
+                ));
         }
 
         activityLogService.logActivity(

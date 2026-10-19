@@ -1,5 +1,5 @@
 /**
- * Newtonite Typed API Client for M2 Work-Item Workflow
+ * Newtonite Typed API Client for M3 Authentication and Team-Scoped Work Items
  */
 
 export interface BackendUserSummary {
@@ -81,7 +81,90 @@ export interface UpdateWorkItemPayload {
   systemArea?: string
 }
 
+export interface AuthTeamMembership {
+  teamId: string
+  teamName: string
+  role: string
+}
+
+export interface AuthUser {
+  id: string
+  email: string
+  name: string
+  avatarInitials: string
+  systemRole: string
+  teams: AuthTeamMembership[]
+}
+
+export interface LoginResponse {
+  token: string
+  type: string
+  user: AuthUser
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api"
+
+let memoryToken: string | null = null
+
+export function getAuthToken(): string | null {
+  if (typeof window !== "undefined" && !memoryToken) {
+    memoryToken = sessionStorage.getItem("newtonite_auth_token")
+  }
+  return memoryToken
+}
+
+export function setAuthToken(token: string | null): void {
+  memoryToken = token
+  if (typeof window !== "undefined") {
+    if (token) {
+      sessionStorage.setItem("newtonite_auth_token", token)
+    } else {
+      sessionStorage.removeItem("newtonite_auth_token")
+    }
+  }
+}
+
+function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { ...extraHeaders }
+  const token = getAuthToken()
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`
+  }
+  return headers
+}
+
+export async function login(email: string, password: string): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email, password }),
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Login failed: ${res.status}`)
+  }
+
+  const data: LoginResponse = await res.json()
+  setAuthToken(data.token)
+  return data
+}
+
+export async function getCurrentUser(): Promise<AuthUser> {
+  const res = await fetch(`${API_BASE}/auth/me`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      setAuthToken(null)
+    }
+    throw new Error(`Failed to get current user: ${res.status}`)
+  }
+
+  return res.json()
+}
 
 export async function fetchWorkItems(params?: {
   search?: string
@@ -108,6 +191,7 @@ export async function fetchWorkItems(params?: {
   if (params?.sort) query.set("sort", params.sort)
 
   const res = await fetch(`${API_BASE}/work-items?${query.toString()}`, {
+    headers: getAuthHeaders(),
     cache: "no-store",
   })
   if (!res.ok) {
@@ -117,7 +201,10 @@ export async function fetchWorkItems(params?: {
 }
 
 export async function getWorkItem(id: string): Promise<BackendWorkItem> {
-  const res = await fetch(`${API_BASE}/work-items/${id}`, { cache: "no-store" })
+  const res = await fetch(`${API_BASE}/work-items/${id}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
   if (!res.ok) {
     throw new Error(`Failed to fetch work item ${id}: ${res.status} ${res.statusText}`)
   }
@@ -137,11 +224,12 @@ export async function createWorkItem(
 
   const res = await fetch(`${API_BASE}/work-items`, {
     method: "POST",
-    headers,
+    headers: getAuthHeaders(headers),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    throw new Error(`Failed to create work item: ${res.status} ${res.statusText}`)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to create work item: ${res.status}`)
   }
   return res.json()
 }
@@ -160,11 +248,12 @@ export async function updateWorkItem(
 
   const res = await fetch(`${API_BASE}/work-items/${id}`, {
     method: "PATCH",
-    headers,
+    headers: getAuthHeaders(headers),
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
-    throw new Error(`Failed to update work item ${id}: ${res.status} ${res.statusText}`)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to update work item ${id}: ${res.status}`)
   }
   return res.json()
 }
@@ -172,9 +261,11 @@ export async function updateWorkItem(
 export async function claimWorkItem(id: string): Promise<BackendWorkItem> {
   const res = await fetch(`${API_BASE}/work-items/${id}/claim`, {
     method: "POST",
+    headers: getAuthHeaders(),
   })
   if (!res.ok) {
-    throw new Error(`Failed to claim work item ${id}: ${res.status} ${res.statusText}`)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to claim work item ${id}: ${res.status}`)
   }
   return res.json()
 }
@@ -185,6 +276,7 @@ export async function fetchActivityHistory(
   size = 20
 ): Promise<BackendPagedResponse<BackendActivityLog>> {
   const res = await fetch(`${API_BASE}/work-items/${id}/activity?page=${page}&size=${size}`, {
+    headers: getAuthHeaders(),
     cache: "no-store",
   })
   if (!res.ok) {

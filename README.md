@@ -241,20 +241,56 @@ Status changes must follow explicit operations transitions:
 
 ---
 
-## Concurrency & Security Baseline
+---
 
-- **Atomic Claiming**: Evaluated at the database level using `UPDATE ... WHERE id = :id AND assignee_id IS NULL`. Guaranteed to prevent race conditions without table-wide locking.
-- **Optimistic Locking**: Enforced via JPA `@Version` and explicit `expectedVersion` preconditions, returning `409 Conflict` on stale writes.
-- **Request Idempotency**: Handled transactionally with SHA-256 payload hashing and cached response replay.
-- **Security Boundary**: In Milestone M2, the server resolves the current actor via `CurrentUserProvider` (seeded developer Alex Morgan). Client-supplied headers like `X-User-Id` are deliberately not trusted as authenticated identity. Real authentication (JWT/OAuth2) and role authorization are scheduled for Milestone M3.
+## Authentication & Team-Level Authorization (Milestone M3)
+
+### 1. Authentication Design
+- **Protocol**: Stateless Bearer JWT using HMAC-SHA256 (`io.jsonwebtoken:jjwt:0.12.6`).
+- **Password Hashing**: BCrypt with 10 rounds (`BCryptPasswordEncoder`).
+- **Principal Resolution**: `SecurityCurrentUserProvider` extracts the authenticated `UserPrincipal` from `SecurityContextHolder`. Client-supplied identity headers (`X-User-Id`, etc.) are strictly ignored.
+- **Error Handling**: Missing or invalid tokens return structured `401 Unauthorized`. Invalid login credentials return generic `401 Unauthorized` without revealing account existence.
+
+### 2. Endpoints
+- **`POST /api/auth/login`**: Validates email/password credentials and issues a signed JWT access token.
+- **`GET /api/auth/me`**: Returns the authenticated user's ID, email, name, system role, and team memberships.
+
+### 3. Team Authorization Matrix
+- **ADMIN** (`system_role = 'ADMIN'`): Global access across all teams.
+- **MEMBER / TEAM_LEAD**: Strictly restricted to teams they belong to.
+- **Cross-Team Read/Write Restrictions**: Operators from Team A cannot read (`403`), update (`403`), claim (`403`), or inspect activity logs (`403`) for work items belonging to Team B.
+- **Cross-Team Assignment Prevention**: Work items cannot be assigned to users who are not members of the item's team (`400 Bad Request`).
+- **Team Filter Scoping**: `GET /api/work-items?teamId=...` for unauthorized teams returns `403 Forbidden`. Unfiltered queries automatically scope results to the operator's authorized teams.
+
+### 4. User-Scoped Idempotency
+- In Flyway migration `V3`, `idempotency_records` uses a composite primary key `(user_id, key)`.
+- Cached responses and collision detection are isolated per operator, preventing cross-user data leakage.
+
+### 5. Local Development Accounts
+All development accounts use the local development password:
+**`NewtoniteDev2026!`** (hashed with BCrypt in migration `V3`):
+
+| Name | Email | System Role | Primary Team | Team Role |
+| :--- | :--- | :--- | :--- | :--- |
+| **Alex Morgan** | `alex.morgan@acme.internal` | `ADMIN` | Acme Studio | `TEAM_LEAD` |
+| **Sarah Chen** | `sarah.chen@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| **Marcus Bell** | `marcus.bell@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| **Elena Rostova** | `elena.rostova@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| **Liam Vance** | `liam.vance@acme.internal` | `USER` | Acme Platform | `TEAM_LEAD` |
+
+---
+
+## Concurrency & Guarantees
+- **Atomic Claiming**: Evaluated at the database level using `UPDATE ... WHERE id = :id AND assignee_id IS NULL`.
+- **Optimistic Locking**: Enforced via JPA `@Version` and explicit `expectedVersion` or `If-Match` preconditions (`409 Conflict`).
+- **State Transitions**: Validated per state machine; terminal states (`COMPLETED`) cannot be reopened.
 
 ---
 
 ## Testing & Verification
 
 ### Running Automated Tests
-
-Run the complete test suite against the PostgreSQL database:
+Run the complete backend integration and security test suite:
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.7-hotspot"
@@ -263,11 +299,12 @@ cd backend
 ```
 
 Test coverage includes:
-1. **`ConcurrentClaimingTests`**: Mandatory Scenario 1 — simultaneous claim requests, atomic winner selection, 409 conflict on loser, single audit entry.
-2. **`OptimisticLockingTests`**: Mandatory Scenario 2 — stale write detection, 409 conflict, winner data preservation, zero ghost audit logs.
-3. **`IdempotencyTests`**: Mandatory Scenario 3 — duplicate create retry replay, payload mismatch conflict detection (409).
-4. **`WorkItemWorkflowTests`**: Full CRUD, validation error mapping, invalid state transition rejection, no-op update audit suppression.
-5. **`NewtoniteApplicationTests` & `HealthEndpointTests`**: Database migration validation and actuator healthcheck.
+1. **`SecurityAuthTests`**: 12 mandatory security scenarios covering login success, 401 on bad credentials/unauthenticated requests, token expiry, identity spoofing defense, cross-team read/mutation isolation (403), cross-team assignment rejection (400), team filter scoping, and user-scoped idempotency.
+2. **`ConcurrentClaimingTests`**: Concurrency under atomic claim with authenticated actors.
+3. **`OptimisticLockingTests`**: Optimistic locking, stale version rejection, ETag preconditions.
+4. **`IdempotencyTests`**: Transactional idempotency, payload mismatch conflict detection.
+5. **`WorkItemWorkflowTests`**: Full lifecycle workflow, validation, and activity log auditing.
+6. **`NewtoniteApplicationTests` & `HealthEndpointTests`**: Database migration validation and health probes.
 
 Package executable JAR:
 ```powershell
@@ -280,3 +317,12 @@ cd frontend
 npm run lint
 npm run build
 ```
+
+---
+
+## Current Limitations & Production-Hardening Requirements
+
+1. **Token Storage**: The frontend stores short-lived JWT tokens in session storage for the challenge demo. Production environments should use HTTP-only, SameSite=Strict cookies to guard against XSS token exfiltration.
+2. **Token Revocation**: Stateless JWTs cannot be revoked prior to expiration without a distributed token blacklist (e.g. Redis).
+3. **Brute Force Protection**: `/api/auth/login` does not currently implement IP or account rate-limiting / lockout. Production deployment should introduce Bucket4j or API gateway rate limiting.
+4. **Secret Management**: `JWT_SECRET` must be set via secure environment variables or a secret vault (e.g., AWS Secrets Manager, HashiCorp Vault) rather than the fallback development secret.

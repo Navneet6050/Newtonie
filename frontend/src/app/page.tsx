@@ -1,3 +1,5 @@
+"use client"
+
 import * as React from "react"
 import {
   AlertTriangle,
@@ -9,8 +11,12 @@ import {
 import { DashboardShell } from "@/components/dashboard/dashboard-shell"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { WorkQueue } from "@/components/dashboard/work-queue"
+import { useAuth } from "@/lib/auth-context"
 
 export default function Home() {
+  const { user } = useAuth()
+  const greetingName = user?.name ? user.name.split(" ")[0] : "Alex"
+
   return (
     <DashboardShell>
       <div className="space-y-6">
@@ -24,7 +30,7 @@ export default function Home() {
               id="dashboard-overview-heading"
               className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl"
             >
-              Good morning, Alex
+              Good morning, {greetingName}
             </h1>
             <p className="text-sm text-zinc-400">
               Here’s what’s happening across your workspace.

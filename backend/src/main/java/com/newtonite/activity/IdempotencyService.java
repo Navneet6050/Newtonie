@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.HexFormat;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 public class IdempotencyService {
@@ -44,12 +45,12 @@ public class IdempotencyService {
     }
 
     @Transactional(readOnly = true)
-    public Optional<WorkItemResponse> getCachedResponse(String key, String requestHash) {
-        if (key == null || key.isBlank()) {
+    public Optional<WorkItemResponse> getCachedResponse(UUID userId, String key, String requestHash) {
+        if (userId == null || key == null || key.isBlank()) {
             return Optional.empty();
         }
 
-        Optional<IdempotencyRecord> recordOpt = idempotencyRecordRepository.findById(key);
+        Optional<IdempotencyRecord> recordOpt = idempotencyRecordRepository.findById(new IdempotencyRecordId(userId, key));
         if (recordOpt.isEmpty()) {
             return Optional.empty();
         }
@@ -71,14 +72,15 @@ public class IdempotencyService {
     }
 
     @Transactional
-    public void recordSuccess(String key, String endpoint, String requestHash, int statusCode, WorkItemResponse response) {
-        if (key == null || key.isBlank()) {
+    public void recordSuccess(UUID userId, String key, String endpoint, String requestHash, int statusCode, WorkItemResponse response) {
+        if (userId == null || key == null || key.isBlank()) {
             return;
         }
 
         try {
             String bodyJson = objectMapper.writeValueAsString(response);
             IdempotencyRecord record = new IdempotencyRecord(
+                    userId,
                     key,
                     endpoint,
                     requestHash,

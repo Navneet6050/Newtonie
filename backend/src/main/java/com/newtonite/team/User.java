@@ -29,6 +29,12 @@ public class User {
     @Column(name = "system_role", nullable = false, length = 50)
     private String systemRole;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
+    @Column(nullable = false)
+    private boolean enabled = true;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -39,11 +45,17 @@ public class User {
     }
 
     public User(UUID id, String email, String name, String avatarInitials, String systemRole) {
+        this(id, email, name, avatarInitials, systemRole, null, true);
+    }
+
+    public User(UUID id, String email, String name, String avatarInitials, String systemRole, String passwordHash, boolean enabled) {
         this.id = id;
         this.email = email;
         this.name = name;
         this.avatarInitials = avatarInitials;
         this.systemRole = systemRole;
+        this.passwordHash = passwordHash;
+        this.enabled = enabled;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
@@ -86,6 +98,22 @@ public class User {
 
     public void setSystemRole(String systemRole) {
         this.systemRole = systemRole;
+    }
+
+    public String getPasswordHash() {
+        return passwordHash;
+    }
+
+    public void setPasswordHash(String passwordHash) {
+        this.passwordHash = passwordHash;
+    }
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
     }
 
     public Instant getCreatedAt() {

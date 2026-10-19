@@ -15,7 +15,6 @@ import java.util.UUID;
  * In accordance with engineering requirements, it does NOT trust client-supplied identity headers (such as X-User-Id).
  * Production identity (e.g. JWT tokens or authenticated session principals) will replace this in future milestones.
  */
-@Component
 public class DevelopmentCurrentUserProvider implements CurrentUserProvider {
 
     public static final UUID DEV_USER_ID = UUID.fromString("11111111-1111-1111-1111-111111111111");

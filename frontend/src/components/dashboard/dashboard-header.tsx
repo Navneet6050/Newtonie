@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth-context"
 
 interface NotificationItem {
   id: string
@@ -49,6 +50,7 @@ export function DashboardHeader({
   searchValue = "",
   onSearchChange,
 }: DashboardHeaderProps) {
+  const { user, logout, setShowLoginModal, isAuthenticated } = useAuth()
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [internalSearch, setInternalSearch] = React.useState("")
   const isSearchControlled = onSearchChange !== undefined
@@ -281,41 +283,55 @@ export function DashboardHeader({
         </DropdownMenu>
 
         {/* Profile Avatar Control */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-lg p-0.5 focus-visible:ring-2 focus-visible:ring-indigo-500/40 outline-none"
-              aria-label="User menu for Alex Morgan"
+        {isAuthenticated && user ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2 rounded-lg p-0.5 focus-visible:ring-2 focus-visible:ring-indigo-500/40 outline-none cursor-pointer"
+                aria-label={`User menu for ${user.name}`}
+              >
+                <Avatar size="sm" className="size-7 border border-white/[0.12] hover:border-indigo-400/50 transition-colors">
+                  <AvatarFallback className="bg-zinc-800 text-indigo-300 font-semibold text-xs">
+                    {user.avatarInitials || user.name.slice(0, 2).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="w-48 border-white/[0.08] bg-[#141418] text-zinc-200"
             >
-              <Avatar size="sm" className="size-7 border border-white/[0.12] hover:border-indigo-400/50 transition-colors">
-                <AvatarFallback className="bg-zinc-800 text-indigo-300 font-semibold text-xs">
-                  AM
-                </AvatarFallback>
-              </Avatar>
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent
-            align="end"
-            className="w-48 border-white/[0.08] bg-[#141418] text-zinc-200"
+              <DropdownMenuLabel>
+                <div className="text-xs font-medium text-zinc-100">{user.name}</div>
+                <div className="text-[10px] text-zinc-400">{user.email}</div>
+                <div className="mt-1 text-[9px] font-mono text-indigo-400 uppercase">{user.systemRole}</div>
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
+              <DropdownMenuItem
+                onClick={() => setShowLoginModal(true)}
+                className="text-xs cursor-pointer hover:bg-white/[0.05]"
+              >
+                Switch Operator
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="bg-white/[0.06]" />
+              <DropdownMenuItem
+                onClick={logout}
+                className="text-xs text-rose-400 cursor-pointer hover:bg-rose-500/10"
+              >
+                Sign Out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowLoginModal(true)}
+            className="flex items-center gap-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors cursor-pointer"
           >
-            <DropdownMenuLabel>
-              <div className="text-xs font-medium text-zinc-100">Alex Morgan</div>
-              <div className="text-[10px] text-zinc-400">alex.morgan@acme.internal</div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-white/[0.06]" />
-            <DropdownMenuItem className="text-xs cursor-pointer hover:bg-white/[0.05]">
-              Profile Settings
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs cursor-pointer hover:bg-white/[0.05]">
-              Operational Logs
-            </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-white/[0.06]" />
-            <DropdownMenuItem className="text-xs text-rose-400 cursor-pointer hover:bg-rose-500/10">
-              Sign Out
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+            Sign In
+          </button>
+        )}
       </div>
     </header>
   )
