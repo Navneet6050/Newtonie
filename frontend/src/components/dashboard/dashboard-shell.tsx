@@ -5,6 +5,8 @@ import { AppSidebar, type NavItemKey } from "./app-sidebar"
 import { DashboardHeader } from "./dashboard-header"
 import { CreateItemDialog } from "@/components/work-items/create-item-dialog"
 import { WorkItemDrawer } from "@/components/work-items/work-item-drawer"
+import { TeamsView } from "@/components/teams/teams-view"
+import { ActivityView } from "@/components/activity/activity-view"
 import { useAuth } from "@/lib/auth-context"
 
 export interface DashboardContextValue {
@@ -42,13 +44,14 @@ export const useDashboardSearch = () => {
 }
 
 interface DashboardShellProps {
-  children: React.ReactNode
+  children?: React.ReactNode
+  initialNav?: NavItemKey
 }
 
-export function DashboardShell({ children }: DashboardShellProps) {
+export function DashboardShell({ children, initialNav = "overview" }: DashboardShellProps) {
   const { user, setShowLoginModal } = useAuth()
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
-  const [activeNav, setActiveNav] = React.useState<NavItemKey>("overview")
+  const [activeNav, setActiveNav] = React.useState<NavItemKey>(initialNav)
   const [searchQuery, setSearchQuery] = React.useState("")
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [isCreateOpen, setIsCreateOpen] = React.useState(false)
@@ -161,27 +164,12 @@ export function DashboardShell({ children }: DashboardShellProps) {
             tabIndex={-1}
             className="flex-1 px-4 py-4 sm:px-6 lg:px-8 w-full max-w-[1400px] mx-auto outline-none"
           >
-            {activeNav === "overview" || activeNav === "my_work" || activeNav === "all_work_items" ? (
-              children
+            {activeNav === "teams" ? (
+              <TeamsView />
+            ) : activeNav === "activity" ? (
+              <ActivityView />
             ) : (
-              <div className="rounded-xl border border-white/[0.08] bg-[#111114]/90 p-8 text-center">
-                <div className="mx-auto flex size-12 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] text-indigo-400">
-                  <span className="font-mono text-sm font-semibold">OPS</span>
-                </div>
-                <h2 className="mt-4 text-base font-medium text-zinc-200">
-                  {navTitles[activeNav]} View
-                </h2>
-                <p className="mt-1 text-xs text-zinc-400 max-w-md mx-auto">
-                  This section is configured in the operations hierarchy. Click &quot;Overview&quot; in the left sidebar to return to the primary command center.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setActiveNav("overview")}
-                  className="mt-4 inline-flex items-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors"
-                >
-                  Back to Overview
-                </button>
-              </div>
+              children
             )}
           </main>
         </div>

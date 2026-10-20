@@ -14,6 +14,26 @@ export interface BackendTeamSummary {
   name: string
 }
 
+export interface BackendTeamMember {
+  userId: string
+  name: string
+  email: string
+  avatarInitials: string
+  role: string
+  joinedAt: string
+}
+
+export interface BackendTeam {
+  id: string
+  name: string
+  description?: string | null
+  memberCount: number
+  workItemCount: number
+  members: BackendTeamMember[]
+  createdAt: string
+  updatedAt: string
+}
+
 export type BackendWorkItemType = "INCIDENT" | "TASK" | "BUG" | "OPS"
 export type BackendWorkItemStatus = "OPEN" | "IN_PROGRESS" | "REVIEW_NEEDED" | "COMPLETED" | "BLOCKED"
 export type BackendWorkItemPriority = "URGENT" | "HIGH" | "MEDIUM" | "LOW"
@@ -49,6 +69,8 @@ export interface BackendPagedResponse<T> {
 export interface BackendActivityLog {
   id: string
   workItemId: string
+  trackingNumber?: string | null
+  workItemTitle?: string | null
   actor?: BackendUserSummary | null
   actionType: string
   fieldName?: string | null
@@ -387,6 +409,54 @@ export async function createWorkItemComment(id: string, content: string): Promis
   return res.json()
 }
 
+
+export async function fetchTeams(): Promise<BackendTeam[]> {
+  const res = await fetch(`${API_BASE}/teams`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch teams: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchTeamDetails(id: string): Promise<BackendTeam> {
+  const res = await fetch(`${API_BASE}/teams/${id}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch team ${id}: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function fetchActivityFeed(
+  teamId?: string,
+  page = 0,
+  size = 20
+): Promise<BackendPagedResponse<BackendActivityLog>> {
+  const params = new URLSearchParams()
+  if (teamId) params.append("teamId", teamId)
+  params.append("page", String(page))
+  params.append("size", String(size))
+
+  const res = await fetch(`${API_BASE}/activity?${params.toString()}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch activity feed: ${res.status}`)
+  }
+  return res.json()
+}
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {
