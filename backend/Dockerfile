@@ -22,4 +22,4 @@ COPY --from=builder /workspace/app/target/*.jar app.jar
 ENV SERVER_PORT=8080
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-XX:+UseZGC", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:+UseSerialGC", "-Xmx256m", "-Xms128m", "-XX:MaxMetaspaceSize=128m", "-XX:ReservedCodeCacheSize=64m", "-Xss512k", "-jar", "app.jar"]
