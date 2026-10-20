@@ -41,7 +41,7 @@ import {
   fetchWorkItems,
 } from "@/lib/api"
 
-type FilterType = "all" | "high_priority" | "in_progress" | "review_needed"
+type FilterType = "all" | "high_priority" | "in_progress" | "review_needed" | "blocked"
 
 export function WorkQueue() {
   const { user, isAuthenticated, setShowLoginModal } = useAuth()
@@ -103,6 +103,8 @@ export function WorkQueue() {
       statusParam = "IN_PROGRESS"
     } else if (activeFilter === "review_needed") {
       statusParam = "REVIEW_NEEDED"
+    } else if (activeFilter === "blocked") {
+      statusParam = "BLOCKED"
     } else if (activeFilter === "high_priority") {
       priorityParam = "URGENT,HIGH"
     }
@@ -303,7 +305,7 @@ export function WorkQueue() {
   return (
     <section
       aria-labelledby="work-queue-heading"
-      className="rounded-xl border border-white/[0.08] bg-[#111114]/90 p-5 backdrop-blur-sm"
+      className="surface-elevated rounded-xl p-5 border border-white/[0.08]"
     >
       {/* Section Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-4">
@@ -410,6 +412,21 @@ export function WorkQueue() {
             >
               Review Needed
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveFilter("blocked")
+                setPage(0)
+              }}
+              className={cn(
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
+                activeFilter === "blocked"
+                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-sm"
+                  : "text-zinc-400 hover:text-zinc-200"
+              )}
+            >
+              Blocked
+            </button>
           </div>
         </div>
       </div>
@@ -479,7 +496,7 @@ export function WorkQueue() {
             <div
               key={item.id}
               onClick={() => openItemDetails(item.id)}
-              className="group flex flex-col gap-3 py-3 px-2 sm:flex-row sm:items-center sm:justify-between rounded-lg transition-colors hover:bg-white/[0.03] cursor-pointer"
+              className="group flex flex-col gap-3 py-3 px-2 sm:flex-row sm:items-center sm:justify-between rounded-lg border-l-2 border-l-transparent transition-all duration-150 hover:border-l-indigo-500 hover:bg-white/[0.035] hover:pl-3 cursor-pointer"
             >
               {/* Left Details */}
               <div className="flex items-start gap-3 min-w-0">

@@ -58,6 +58,18 @@ export interface BackendActivityLog {
   timestamp: string
 }
 
+export interface BackendComment {
+  id: string
+  workItemId: string
+  authorId: string
+  authorName: string
+  authorEmail: string
+  authorInitials: string | null
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface CreateWorkItemPayload {
   title: string
   description?: string
@@ -108,18 +120,27 @@ let memoryToken: string | null = null
 
 export function getAuthToken(): string | null {
   if (typeof window !== "undefined" && !memoryToken) {
-    memoryToken = sessionStorage.getItem("newtonite_auth_token")
+    memoryToken =
+      sessionStorage.getItem("newtonite_auth_token") ||
+      localStorage.getItem("newtonite_auth_token")
   }
   return memoryToken
 }
 
-export function setAuthToken(token: string | null): void {
+export function setAuthToken(token: string | null, remember = true): void {
   memoryToken = token
   if (typeof window !== "undefined") {
     if (token) {
-      sessionStorage.setItem("newtonite_auth_token", token)
+      if (remember) {
+        localStorage.setItem("newtonite_auth_token", token)
+        sessionStorage.removeItem("newtonite_auth_token")
+      } else {
+        sessionStorage.setItem("newtonite_auth_token", token)
+        localStorage.removeItem("newtonite_auth_token")
+      }
     } else {
       sessionStorage.removeItem("newtonite_auth_token")
+      localStorage.removeItem("newtonite_auth_token")
     }
   }
 }
@@ -153,7 +174,11 @@ function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, s
   return headers
 }
 
-export async function login(email: string, password: string): Promise<LoginResponse> {
+export async function login(
+  email: string,
+  password: string,
+  rememberDevice = true
+): Promise<LoginResponse> {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -166,7 +191,7 @@ export async function login(email: string, password: string): Promise<LoginRespo
   }
 
   const data: LoginResponse = await res.json()
-  setAuthToken(data.token)
+  setAuthToken(data.token, rememberDevice)
   return data
 }
 
@@ -331,6 +356,37 @@ export async function fetchActivityHistory(
   }
   return res.json()
 }
+
+export async function fetchWorkItemComments(id: string): Promise<BackendComment[]> {
+  const res = await fetch(`${API_BASE}/work-items/${id}/comments`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch comments for ${id}: ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function createWorkItemComment(id: string, content: string): Promise<BackendComment> {
+  const res = await fetch(`${API_BASE}/work-items/${id}/comments`, {
+    method: "POST",
+    headers: {
+      ...getAuthHeaders(),
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to post comment for ${id}: ${res.status}`)
+  }
+  return res.json()
+}
+
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {

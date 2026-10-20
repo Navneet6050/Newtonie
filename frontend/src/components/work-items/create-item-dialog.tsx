@@ -112,7 +112,7 @@ export function CreateItemDialog({
       aria-modal="true"
       aria-labelledby="create-item-title"
     >
-      <div className="relative w-full max-w-lg rounded-xl border border-white/[0.08] bg-[#111114] p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-lg rounded-xl surface-overlay p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
         <button
           type="button"
           onClick={handleClose}

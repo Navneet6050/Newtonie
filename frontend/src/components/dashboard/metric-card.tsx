@@ -42,18 +42,20 @@ export function MetricCard({
 
   return (
     <div
+      role="region"
+      aria-label={`${title}: ${value}. ${contextLabel}`}
       className={cn(
-        "group relative flex flex-col justify-between overflow-hidden rounded-xl border border-white/[0.08] bg-[#111114]/90 p-5 transition-all duration-200 hover:border-white/[0.14] hover:bg-[#131317]",
+        "group relative flex flex-col justify-between overflow-hidden rounded-xl surface-elevated p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-white/[0.14] hover:shadow-lg",
         variantStyles.accentGlow
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="space-y-1">
-          <span className="text-xs font-medium uppercase tracking-wider text-zinc-400">
+        <div className="space-y-1.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
             {title}
           </span>
           <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-semibold tracking-tight text-zinc-100 font-mono">
+            <span className="text-3xl font-semibold tracking-tight text-zinc-100 font-mono tabular-nums">
               {value}
             </span>
           </div>
@@ -61,7 +63,7 @@ export function MetricCard({
 
         <div
           className={cn(
-            "flex size-9 shrink-0 items-center justify-center rounded-lg border",
+            "flex size-9 shrink-0 items-center justify-center rounded-lg border shadow-xs transition-transform duration-200 group-hover:scale-105",
             variantStyles.iconBg
           )}
           aria-hidden="true"

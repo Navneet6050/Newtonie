@@ -13,7 +13,7 @@ interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string) => Promise<void>
+  login: (email: string, password: string, rememberDevice?: boolean) => Promise<void>
   logout: () => void
   showLoginModal: boolean
   setShowLoginModal: (show: boolean) => void
@@ -74,10 +74,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, rememberDevice = true) => {
     setIsLoading(true)
     try {
-      const resp = await apiLogin(email, password)
+      const resp = await apiLogin(email, password, rememberDevice)
       setUser(resp.user)
       setShowLoginModal(false)
     } finally {

@@ -11,8 +11,10 @@ import {
   LogIn,
   RotateCw,
 } from "lucide-react"
+import Link from "next/link"
 import { DashboardShell, useDashboard } from "@/components/dashboard/dashboard-shell"
 import { MetricCard } from "@/components/dashboard/metric-card"
+import { OpsDistributionGauge } from "@/components/dashboard/ops-distribution-gauge"
 import { WorkQueue } from "@/components/dashboard/work-queue"
 import { useAuth } from "@/lib/auth-context"
 import { type BackendWorkItemMetrics, fetchWorkItemMetrics } from "@/lib/api"
@@ -118,17 +120,25 @@ function DashboardContent() {
                 Operator Authentication Required
               </div>
               <div className="text-zinc-400 mt-0.5">
-                Sign in with a seeded operations profile (Alex Morgan, Sarah Chen, or Liam Vance) to execute live work-item workflows.
+                Sign in with enterprise credentials or dedicated operations access to execute live work-item workflows.
               </div>
             </div>
           </div>
-          <Button
-            size="sm"
-            onClick={() => setShowLoginModal(true)}
-            className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3.5 cursor-pointer"
-          >
-            Sign In Now
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/login"
+              className="inline-flex items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/20 px-3.5 py-1.5 font-medium text-xs text-indigo-200 hover:bg-indigo-500/30 hover:text-white transition-colors"
+            >
+              Dedicated Sign In
+            </Link>
+            <Button
+              size="sm"
+              onClick={() => setShowLoginModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3.5 cursor-pointer"
+            >
+              Quick Modal
+            </Button>
+          </div>
         </section>
       )}
 
@@ -204,6 +214,11 @@ function DashboardContent() {
           />
         </div>
       </section>
+
+      {/* Operational Distribution & Health Gauge */}
+      {metrics && metrics.totalCount > 0 && (
+        <OpsDistributionGauge metrics={metrics} isLoading={isLoadingMetrics} />
+      )}
 
       {/* Work Queue Section */}
       <WorkQueue />

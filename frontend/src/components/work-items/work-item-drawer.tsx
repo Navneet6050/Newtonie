@@ -8,6 +8,8 @@ import {
   Copy,
   History,
   Loader2,
+  MessageSquare,
+  Send,
   UserCheck,
   X,
 } from "lucide-react"
@@ -15,10 +17,13 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   type BackendActivityLog,
+  type BackendComment,
   type BackendWorkItem,
   type BackendWorkItemStatus,
   claimWorkItem,
+  createWorkItemComment,
   fetchActivityHistory,
+  fetchWorkItemComments,
   getWorkItem,
   updateWorkItem,
 } from "@/lib/api"
@@ -38,6 +43,11 @@ export function WorkItemDrawer({
 }: WorkItemDrawerProps) {
   const [item, setItem] = React.useState<BackendWorkItem | null>(null)
   const [activityLogs, setActivityLogs] = React.useState<BackendActivityLog[]>([])
+  const [comments, setComments] = React.useState<BackendComment[]>([])
+  const [newComment, setNewComment] = React.useState("")
+  const [isPostingComment, setIsPostingComment] = React.useState(false)
+  const [commentError, setCommentError] = React.useState<string | null>(null)
+  const [activeTab, setActiveTab] = React.useState<"comments" | "activity">("comments")
   const [isLoading, setIsLoading] = React.useState(false)
   const [isMutating, setIsMutating] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -47,12 +57,14 @@ export function WorkItemDrawer({
     setIsLoading(true)
     setError(null)
     try {
-      const [fetchedItem, fetchedLogs] = await Promise.all([
+      const [fetchedItem, fetchedLogs, fetchedComments] = await Promise.all([
         getWorkItem(id),
         fetchActivityHistory(id, 0, 50).catch(() => ({ content: [] as BackendActivityLog[] })),
+        fetchWorkItemComments(id).catch(() => [] as BackendComment[]),
       ])
       setItem(fetchedItem)
       setActivityLogs(fetchedLogs.content || [])
+      setComments(fetchedComments || [])
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message)
@@ -73,11 +85,13 @@ export function WorkItemDrawer({
     Promise.all([
       getWorkItem(itemId),
       fetchActivityHistory(itemId, 0, 50).catch(() => ({ content: [] as BackendActivityLog[] })),
+      fetchWorkItemComments(itemId).catch(() => [] as BackendComment[]),
     ])
-      .then(([fetchedItem, fetchedLogs]) => {
+      .then(([fetchedItem, fetchedLogs, fetchedComments]) => {
         if (!isMounted) return
         setItem(fetchedItem)
         setActivityLogs(fetchedLogs.content || [])
+        setComments(fetchedComments || [])
       })
       .catch((err: unknown) => {
         if (!isMounted) return
@@ -215,6 +229,30 @@ export function WorkItemDrawer({
     }
   }
 
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newComment.trim() || !item) return
+    setIsPostingComment(true)
+    setCommentError(null)
+    try {
+      const created = await createWorkItemComment(item.id, newComment.trim())
+      setComments((prev) => [...prev, created])
+      setNewComment("")
+      fetchActivityHistory(item.id, 0, 50)
+        .then((res) => setActivityLogs(res.content || []))
+        .catch(() => {})
+      onItemUpdated()
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setCommentError(err.message)
+      } else {
+        setCommentError("Failed to post comment.")
+      }
+    } finally {
+      setIsPostingComment(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-item-title">
       {/* Backdrop */}
@@ -227,7 +265,7 @@ export function WorkItemDrawer({
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
         <aside
           aria-label="Work Item Details"
-          className="w-screen max-w-lg border-l border-white/[0.08] bg-[#0f0f13] text-zinc-100 shadow-2xl flex flex-col"
+          className="w-screen max-w-lg surface-overlay text-zinc-100 shadow-2xl flex flex-col"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/[0.06] p-4 bg-zinc-950/40">
@@ -439,61 +477,171 @@ export function WorkItemDrawer({
                   </div>
                 </div>
 
-                {/* Audit Trail & Activity Logs */}
-                <div className="space-y-3 pt-2">
-                  <div className="flex items-center gap-2 border-b border-white/[0.06] pb-2">
-                    <History className="size-3.5 text-indigo-400" />
-                    <h2 className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                      Activity History & Audit Trail ({activityLogs.length})
-                    </h2>
+                {/* Collaboration & Audit Tabs */}
+                <div className="space-y-4 pt-4 border-t border-white/[0.06]">
+                  {/* Tab Header */}
+                  <div className="flex items-center gap-1 border-b border-white/[0.06] pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("comments")}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                        activeTab === "comments"
+                          ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
+                      }`}
+                    >
+                      <MessageSquare className="size-3.5" />
+                      <span>Discussion ({comments.length})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("activity")}
+                      className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+                        activeTab === "activity"
+                          ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/30"
+                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
+                      }`}
+                    >
+                      <History className="size-3.5" />
+                      <span>Audit Trail ({activityLogs.length})</span>
+                    </button>
                   </div>
 
-                  {activityLogs.length > 0 ? (
-                    <div className="relative pl-4 space-y-4 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/[0.08]">
-                      {activityLogs.map((log) => (
-                        <div key={log.id} className="relative text-xs space-y-1">
-                          {/* Dot */}
-                          <span className="absolute -left-4 top-1.5 size-2 rounded-full bg-indigo-500 ring-2 ring-[#0f0f13]" />
-
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-semibold text-zinc-200">
-                              {log.actor?.name || "System Process"}
-                            </span>
-                            <span className="text-zinc-500 font-mono text-[10px]">
-                              {formatTimestamp(log.timestamp)}
-                            </span>
+                  {/* Comments Tab Content */}
+                  {activeTab === "comments" && (
+                    <div className="space-y-4">
+                      {/* Add Comment Form */}
+                      <form onSubmit={handlePostComment} className="space-y-2">
+                        {commentError && (
+                          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+                            <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
+                            <span>{commentError}</span>
                           </div>
-
-                          <div className="flex items-center gap-1.5 text-zinc-400">
-                            <span className="rounded bg-zinc-800 px-1 py-0.2 font-mono text-[10px] text-indigo-300 border border-white/[0.06]">
-                              {log.actionType}
-                            </span>
-                            {log.fieldName && (
-                              <span className="text-zinc-500 text-[11px]">
-                                field: <strong className="text-zinc-300">{log.fieldName}</strong>
-                              </span>
-                            )}
-                          </div>
-
-                          {(log.fromValue || log.toValue) && (
-                            <div className="flex items-center gap-1.5 text-[11px] text-zinc-300 font-mono bg-white/[0.02] px-2 py-1 rounded border border-white/[0.04]">
-                              <span className="text-zinc-500">{log.fromValue || "none"}</span>
-                              <ArrowRight className="size-3 text-zinc-600" />
-                              <span className="text-indigo-300">{log.toValue || "none"}</span>
-                            </div>
-                          )}
-
-                          {log.metadata && (
-                            <p className="text-[11px] text-zinc-400 italic">
-                              &ldquo;{log.metadata}&rdquo;
-                            </p>
-                          )}
+                        )}
+                        <div className="relative">
+                          <textarea
+                            value={newComment}
+                            onChange={(e) => setNewComment(e.target.value)}
+                            disabled={isPostingComment}
+                            placeholder="Add an operational update or triage note..."
+                            rows={3}
+                            maxLength={5000}
+                            className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-indigo-500/70 focus-visible:ring-2 focus-visible:ring-indigo-500/20 outline-none"
+                          />
                         </div>
-                      ))}
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] text-zinc-500 font-mono">
+                            {newComment.length}/5000
+                          </span>
+                          <Button
+                            type="submit"
+                            size="sm"
+                            disabled={isPostingComment || !newComment.trim()}
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3 h-7 gap-1.5 cursor-pointer disabled:opacity-40"
+                          >
+                            {isPostingComment ? (
+                              <>
+                                <Loader2 className="size-3 animate-spin" />
+                                <span>Posting…</span>
+                              </>
+                            ) : (
+                              <>
+                                <Send className="size-3" />
+                                <span>Post Comment</span>
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </form>
+
+                      {/* Comments Feed */}
+                      {comments.length > 0 ? (
+                        <div className="space-y-3 pt-1">
+                          {comments.map((comment) => (
+                            <div
+                              key={comment.id}
+                              className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 space-y-1.5"
+                            >
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Avatar size="sm" className="size-5 border border-white/[0.1]">
+                                    <AvatarFallback className="bg-indigo-950/80 text-indigo-300 text-[9px] font-semibold">
+                                      {comment.authorInitials || comment.authorName.slice(0, 2).toUpperCase()}
+                                    </AvatarFallback>
+                                  </Avatar>
+                                  <span className="font-semibold text-xs text-zinc-200">
+                                    {comment.authorName}
+                                  </span>
+                                </div>
+                                <time className="text-[10px] font-mono text-zinc-500">
+                                  {formatTimestamp(comment.createdAt)}
+                                </time>
+                              </div>
+                              <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap pl-7">
+                                {comment.content}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-6 text-center text-xs text-zinc-500 italic border border-dashed border-white/[0.06] rounded-xl p-4">
+                          No discussion comments yet. Be the first to add an operational update.
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="py-6 text-center text-xs text-zinc-500">
-                      No activity history recorded yet.
+                  )}
+
+                  {/* Audit Trail Tab Content */}
+                  {activeTab === "activity" && (
+                    <div className="space-y-3">
+                      {activityLogs.length > 0 ? (
+                        <div className="relative pl-4 space-y-4 before:absolute before:left-1.5 before:top-2 before:bottom-2 before:w-0.5 before:bg-white/[0.08]">
+                          {activityLogs.map((log) => (
+                            <div key={log.id} className="relative text-xs space-y-1">
+                              {/* Dot */}
+                              <span className="absolute -left-4 top-1.5 size-2 rounded-full bg-indigo-500 ring-2 ring-[#0f0f13]" />
+
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-semibold text-zinc-200">
+                                  {log.actor?.name || "System Process"}
+                                </span>
+                                <span className="text-zinc-500 font-mono text-[10px]">
+                                  {formatTimestamp(log.timestamp)}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 text-zinc-400">
+                                <span className="rounded bg-zinc-800 px-1 py-0.2 font-mono text-[10px] text-indigo-300 border border-white/[0.06]">
+                                  {log.actionType}
+                                </span>
+                                {log.fieldName && (
+                                  <span className="text-zinc-500 text-[11px]">
+                                    field: <strong className="text-zinc-300">{log.fieldName}</strong>
+                                  </span>
+                                )}
+                              </div>
+
+                              {(log.fromValue || log.toValue) && (
+                                <div className="flex items-center gap-1.5 text-[11px] text-zinc-300 font-mono bg-white/[0.02] px-2 py-1 rounded border border-white/[0.04]">
+                                  <span className="text-zinc-500">{log.fromValue || "none"}</span>
+                                  <ArrowRight className="size-3 text-zinc-600" />
+                                  <span className="text-indigo-300">{log.toValue || "none"}</span>
+                                </div>
+                              )}
+
+                              {log.metadata && (
+                                <p className="text-[11px] text-zinc-400 italic">
+                                  &ldquo;{log.metadata}&rdquo;
+                                </p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="py-6 text-center text-xs text-zinc-500">
+                          No activity history recorded yet.
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
