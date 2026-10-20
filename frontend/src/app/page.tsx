@@ -83,43 +83,45 @@ function DashboardContent() {
     )
   }
 
-  const greetingName = user?.name ? user.name.split(" ")[0] : "Operator"
   const roleLabel = user?.systemRole === "ADMIN" ? "System Admin" : "Team Operator"
 
   return (
-    <div className="space-y-4">
-      {/* Top Header Bar */}
+    <div className="space-y-3">
+      {/* Operational Console Header Bar */}
       <section
         aria-labelledby="dashboard-overview-heading"
-        className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-3.5"
+        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.05] pb-2.5 select-none"
       >
         <div className="space-y-0.5">
           <div className="flex items-center gap-2">
             <h1
               id="dashboard-overview-heading"
-              className="text-xl font-bold tracking-tight text-zinc-100 sm:text-2xl"
+              className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100"
             >
-              Good morning, {greetingName}
+              Operations Command
             </h1>
-            <span className="rounded-md bg-indigo-500/10 px-2 py-0.5 text-[10px] font-mono font-medium text-indigo-300 border border-indigo-500/20">
+            <span className="rounded bg-indigo-500/10 px-1.5 py-0.2 text-[10px] font-mono font-medium text-indigo-300 border border-indigo-500/20">
               {roleLabel}
             </span>
+            <span className="text-zinc-500 text-xs hidden sm:inline">•</span>
+            <span className="text-xs text-zinc-400 font-mono hidden sm:inline">
+              {currentWorkspace}
+            </span>
           </div>
-          <p className="text-xs text-zinc-400">
-            Live operational queue for workspace: <strong className="text-zinc-200">{currentWorkspace}</strong>
+          <p className="text-[11px] text-zinc-400">
+            Real-time operations queue and incident orchestration.
           </p>
         </div>
 
-        {/* Status Pill & Date Display */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-400 font-medium">
+        {/* Live Cluster Status & Telemetry Pill */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300 font-mono">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-            <span className="uppercase tracking-wider text-[10px]">Ops Live</span>
+            <span>OPS CLUSTER ONLINE</span>
           </div>
-
-          <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-white/[0.02] px-2.5 py-1 text-xs text-zinc-400 font-mono">
+          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
             <Calendar className="size-3 text-zinc-500" aria-hidden="true" />
-            <span>Tuesday, Oct 20, 2026</span>
+            <span>Oct 20, 2026</span>
           </div>
         </div>
       </section>

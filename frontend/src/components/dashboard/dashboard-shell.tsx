@@ -124,7 +124,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
 
   return (
     <DashboardContext.Provider value={contextValue}>
-      <div className="relative flex min-h-screen bg-[#09090b] text-zinc-100 font-sans">
+      <div className="relative flex min-h-screen bg-[#08090b] text-zinc-100 font-sans">
         {/* Accessibility Skip Link */}
         <a
           href="#main-content"
@@ -159,7 +159,7 @@ export function DashboardShell({ children }: DashboardShellProps) {
           <main
             id="main-content"
             tabIndex={-1}
-            className="flex-1 px-4 py-6 sm:px-6 lg:px-8 max-w-7xl w-full mx-auto outline-none"
+            className="flex-1 px-4 py-4 sm:px-6 lg:px-8 w-full max-w-[1400px] mx-auto outline-none"
           >
             {activeNav === "overview" || activeNav === "my_work" || activeNav === "all_work_items" ? (
               children

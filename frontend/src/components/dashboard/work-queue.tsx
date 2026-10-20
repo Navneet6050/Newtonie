@@ -211,22 +211,6 @@ export function WorkQueue() {
     }
   }
 
-  const getStatusBorderClass = (status: BackendWorkItemStatus) => {
-    switch (status) {
-      case "BLOCKED":
-        return "border-l-rose-500 hover:border-l-rose-400"
-      case "REVIEW_NEEDED":
-        return "border-l-amber-500 hover:border-l-amber-400"
-      case "IN_PROGRESS":
-        return "border-l-blue-500 hover:border-l-blue-400"
-      case "COMPLETED":
-        return "border-l-emerald-500 hover:border-l-emerald-400"
-      case "OPEN":
-      default:
-        return "border-l-zinc-600 hover:border-l-zinc-400"
-    }
-  }
-
   const getTypeBadge = (type: BackendWorkItemType) => {
     switch (type) {
       case "INCIDENT":
@@ -315,37 +299,51 @@ export function WorkQueue() {
     switch (priority) {
       case "URGENT":
         return (
-          <div className="flex items-center gap-1.5 text-xs text-rose-400 font-medium">
-            <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
-            <span>Urgent</span>
+          <div className="flex items-center gap-1 text-[11px] text-rose-400 font-medium" title="Priority: Urgent (P0)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-rose-500 shrink-0">
+              <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 4.5a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zm.75 6.75a.875.875 0 100-1.75.875.875 0 000 1.75z" clipRule="evenodd" />
+            </svg>
+            <span className="hidden xl:inline">Urgent</span>
           </div>
         )
       case "HIGH":
         return (
-          <div className="flex items-center gap-1.5 text-xs text-amber-400 font-medium">
-            <span className="size-1.5 rounded-full bg-amber-500" />
-            <span>High</span>
+          <div className="flex items-center gap-1 text-[11px] text-amber-400 font-medium" title="Priority: High (P1)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-amber-500 shrink-0">
+              <rect x="2" y="9" width="3" height="5" rx="0.5" />
+              <rect x="6.5" y="6" width="3" height="8" rx="0.5" />
+              <rect x="11" y="3" width="3" height="11" rx="0.5" />
+            </svg>
+            <span className="hidden xl:inline">High</span>
           </div>
         )
       case "MEDIUM":
         return (
-          <div className="flex items-center gap-1.5 text-xs text-zinc-300">
-            <span className="size-1.5 rounded-full bg-zinc-500" />
-            <span>Medium</span>
+          <div className="flex items-center gap-1 text-[11px] text-zinc-300" title="Priority: Medium (P2)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-400 shrink-0">
+              <rect x="2" y="9" width="3" height="5" rx="0.5" />
+              <rect x="6.5" y="6" width="3" height="8" rx="0.5" />
+              <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" opacity="0.2" />
+            </svg>
+            <span className="hidden xl:inline">Medium</span>
           </div>
         )
       case "LOW":
         return (
-          <div className="flex items-center gap-1.5 text-xs text-zinc-500">
-            <span className="size-1.5 rounded-full bg-zinc-700" />
-            <span>Low</span>
+          <div className="flex items-center gap-1 text-[11px] text-zinc-400" title="Priority: Low (P3)">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-400 shrink-0">
+              <rect x="2" y="9" width="3" height="5" rx="0.5" />
+              <rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" opacity="0.2" />
+              <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" opacity="0.2" />
+            </svg>
+            <span className="hidden xl:inline">Low</span>
           </div>
         )
     }
   }
 
   const formatDueDate = (iso?: string | null) => {
-    if (!iso) return "No due date"
+    if (!iso) return "—"
     try {
       const d = new Date(iso)
       return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
@@ -358,346 +356,329 @@ export function WorkQueue() {
     <>
       <section
         aria-labelledby="work-queue-heading"
-        className="surface-elevated rounded-xl p-4 sm:p-5 border border-white/[0.08]"
+        className="rounded-lg border border-white/[0.07] bg-[#090a0d] shadow-xs overflow-hidden"
       >
-        {/* Section Header */}
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between border-b border-white/[0.06] pb-3.5">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2
-                id="work-queue-heading"
-                className="text-base font-semibold tracking-tight text-zinc-100"
-              >
-                {activeNav === "my_work" ? "My Assigned Items" : "Live Operations Queue"}
-              </h2>
-              <span className="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[11px] font-mono text-zinc-400 border border-white/[0.06] tabular-nums">
-                {totalElements} items
-              </span>
-            </div>
-            <p className="mt-0.5 text-xs text-zinc-400">
-              Operations stream scoped to authorized workspace and active permissions.
-            </p>
-          </div>
+        {/* Section Header & View Controls */}
+        <div className="flex flex-col gap-2.5 p-3 sm:px-3.5 sm:py-2.5 border-b border-white/[0.06] bg-[#0b0c0f]">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {/* Title & Filter Tabs */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5 mr-2">
+                <h2
+                  id="work-queue-heading"
+                  className="text-[13px] font-semibold tracking-tight text-zinc-100"
+                >
+                  {activeNav === "my_work" ? "My Assigned Issues" : "Active Operations Queue"}
+                </h2>
+                <span className="rounded bg-white/[0.06] px-1.5 py-0.2 text-[10px] font-mono text-zinc-400 tabular-nums">
+                  {totalElements}
+                </span>
+              </div>
 
-          {/* Filters, Search Bar & Quick Add */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Quick Search */}
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search tracking, title…"
-                className="h-8 w-40 rounded-lg border border-white/[0.08] bg-black/40 pl-8 pr-7 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/70 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 sm:w-48 transition-all"
-              />
-              {searchQuery && (
+              {/* Linear-Style View Filter Tabs */}
+              <div className="inline-flex items-center rounded-md border border-white/[0.06] bg-black/40 p-0.5 text-[11px] select-none">
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200"
-                  aria-label="Clear filter text"
+                  onClick={() => {
+                    setActiveFilter("all")
+                    setPage(0)
+                  }}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    activeFilter === "all"
+                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
                 >
-                  <X className="size-3" />
+                  All
                 </button>
-              )}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("high_priority")
+                    setPage(0)
+                  }}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    activeFilter === "high_priority"
+                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                >
+                  Urgent & High
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("in_progress")
+                    setPage(0)
+                  }}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    activeFilter === "in_progress"
+                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                >
+                  In Progress
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("review_needed")
+                    setPage(0)
+                  }}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    activeFilter === "review_needed"
+                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                >
+                  Review Needed
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveFilter("blocked")
+                    setPage(0)
+                  }}
+                  className={cn(
+                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    activeFilter === "blocked"
+                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-xs"
+                      : "text-zinc-400 hover:text-zinc-200"
+                  )}
+                >
+                  Blocked
+                </button>
+              </div>
             </div>
 
-            {/* Filter Tabs */}
-            <div className="inline-flex items-center rounded-lg border border-white/[0.08] bg-black/40 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter("all")
-                  setPage(0)
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors cursor-pointer",
-                  activeFilter === "all"
-                    ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200"
+            {/* Right: Quick Search & Create */}
+            <div className="flex items-center gap-2 self-end sm:self-auto">
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 size-3 text-zinc-500" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Filter queue…"
+                  className="h-7 w-36 sm:w-44 rounded-md border border-white/[0.07] bg-white/[0.02] pl-6.5 pr-6 text-[11px] text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/60 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 transition-all"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200"
+                    aria-label="Clear filter"
+                  >
+                    <X className="size-2.5" />
+                  </button>
                 )}
-              >
-                All
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter("high_priority")
-                  setPage(0)
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors cursor-pointer",
-                  activeFilter === "high_priority"
-                    ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200"
-                )}
-              >
-                Urgent & High
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter("in_progress")
-                  setPage(0)
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors cursor-pointer",
-                  activeFilter === "in_progress"
-                    ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200"
-                )}
-              >
-                In Progress
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter("review_needed")
-                  setPage(0)
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors cursor-pointer",
-                  activeFilter === "review_needed"
-                    ? "bg-zinc-800 text-zinc-100 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200"
-                )}
-              >
-                Review Needed
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setActiveFilter("blocked")
-                  setPage(0)
-                }}
-                className={cn(
-                  "rounded-md px-2.5 py-1 font-medium transition-colors cursor-pointer",
-                  activeFilter === "blocked"
-                    ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-xs"
-                    : "text-zinc-400 hover:text-zinc-200"
-                )}
-              >
-                Blocked
-              </button>
-            </div>
+              </div>
 
-            {/* Quick Add Button */}
-            <Button
-              size="sm"
-              onClick={() => setIsCreateOpen(true)}
-              className="h-8 gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3 cursor-pointer shadow-xs ml-auto sm:ml-0"
-            >
-              <Plus className="size-3.5" />
-              <span>Create Item</span>
-            </Button>
+              <Button
+                size="sm"
+                onClick={() => setIsCreateOpen(true)}
+                className="h-7 gap-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-[11px] px-2.5 rounded-md cursor-pointer shadow-xs"
+              >
+                <Plus className="size-3" />
+                <span>New</span>
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Error Banner */}
         {error && (
-          <div className="mt-3 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+          <div className="m-3 flex items-center justify-between rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
             <div className="flex items-center gap-2">
-              <AlertCircle className="size-4 shrink-0 text-rose-400" />
+              <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
               <span>{error}</span>
             </div>
             <Button
               size="sm"
               variant="ghost"
               onClick={loadQueue}
-              className="text-xs text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 gap-1 h-7 px-2"
+              className="text-xs text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 gap-1 h-6 px-2"
             >
               <RotateCw className="size-3" /> Retry
             </Button>
           </div>
         )}
 
-        {/* Loading Skeletons */}
+        {/* Table Content */}
         {isLoading ? (
-          <div className="mt-3 space-y-2">
-            {[1, 2, 3, 4, 5].map((i) => (
+          <div className="divide-y divide-white/[0.03]">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="flex items-center justify-between p-3 rounded-lg border border-white/[0.04] bg-white/[0.01] animate-pulse"
+                className="flex items-center justify-between px-3.5 py-2.5 animate-pulse"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-4 w-16 bg-zinc-800 rounded" />
-                  <div className="h-4 w-48 sm:w-72 bg-zinc-800 rounded" />
+                  <div className="h-3.5 w-14 bg-zinc-800 rounded" />
+                  <div className="h-3.5 w-48 sm:w-80 bg-zinc-800 rounded" />
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="h-4 w-16 bg-zinc-800 rounded hidden sm:block" />
-                  <div className="h-4 w-20 bg-zinc-800 rounded" />
-                  <div className="h-6 w-6 rounded-full bg-zinc-800" />
+                  <div className="h-3.5 w-16 bg-zinc-800 rounded hidden sm:block" />
+                  <div className="h-3.5 w-20 bg-zinc-800 rounded" />
+                  <div className="h-5 w-5 rounded-full bg-zinc-800" />
                 </div>
               </div>
             ))}
           </div>
         ) : !isAuthenticated ? (
-          /* Unauthenticated State */
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="flex size-11 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
-              <Lock className="size-5" />
+            <div className="flex size-10 items-center justify-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+              <Lock className="size-4" />
             </div>
-            <h3 className="mt-3 text-sm font-semibold text-zinc-100">
-              Sign In to View Work Queue
+            <h3 className="mt-3 text-xs font-semibold text-zinc-100">
+              Authentication Required
             </h3>
-            <p className="mt-1 text-xs text-zinc-400 max-w-sm">
-              Work items are protected by server-enforced team authorization. Sign in to inspect live queue data.
+            <p className="mt-1 text-[11px] text-zinc-400 max-w-sm">
+              Work items are protected by server-enforced team authorization.
             </p>
             <Button
               size="sm"
               onClick={() => setShowLoginModal(true)}
-              className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 cursor-pointer"
+              className="mt-3 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 h-7 cursor-pointer"
             >
               Sign In
             </Button>
           </div>
         ) : items.length > 0 ? (
-          /* Table Header & Rows */
-          <div className="mt-3">
+          <div>
             {/* Desktop Column Header */}
-            <div className="hidden sm:flex items-center justify-between border-b border-white/[0.05] pb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
-              <div className="flex items-center gap-3">
-                <span className="w-20 pl-1">Tracking #</span>
-                <span>Work Item Details</span>
-              </div>
-              <div className="flex items-center gap-4 pr-10">
-                <span className="w-24">Priority</span>
-                <span className="w-28">Status</span>
-                <span className="w-32">Assignee</span>
-              </div>
+            <div className="hidden sm:grid grid-cols-[80px_1fr_120px_100px_120px_40px] items-center border-b border-white/[0.05] py-1.5 px-3.5 text-[10px] font-mono uppercase tracking-wider text-zinc-500 select-none">
+              <span>Issue Key</span>
+              <span>Title & Details</span>
+              <span>Status</span>
+              <span>Priority</span>
+              <span>Assignee</span>
+              <span className="text-right">Act</span>
             </div>
 
-            {/* Rows */}
+            {/* List Rows */}
             <div className="divide-y divide-white/[0.03]">
               {items.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => openItemDetails(item.id)}
-                  className={cn(
-                    "group flex flex-col gap-2.5 py-2.5 px-2.5 sm:flex-row sm:items-center sm:justify-between rounded-lg border-l-3 transition-all duration-150 hover:bg-white/[0.03] cursor-pointer",
-                    getStatusBorderClass(item.status)
-                  )}
+                  className="group flex flex-col sm:grid sm:grid-cols-[80px_1fr_120px_100px_120px_40px] items-start sm:items-center py-2 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none"
                 >
-                  {/* Left Column: Tracking, Title, Area, Due */}
-                  <div className="flex items-start gap-3 min-w-0">
+                  {/* Issue Key / Tracking Number */}
+                  <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={(e) => handleCopyId(e, item.trackingNumber)}
-                      className="shrink-0 font-mono text-xs font-semibold text-indigo-400/90 pt-0.5 hover:text-indigo-300 transition-colors"
+                      className="font-mono text-[11px] font-semibold text-zinc-400 hover:text-indigo-400 transition-colors"
                       title="Click to copy tracking number"
                     >
                       {copiedId === item.trackingNumber ? (
                         <span className="text-emerald-400 flex items-center gap-1">
-                          <Check className="size-3" /> Copied
+                          <Check className="size-3" />
                         </span>
                       ) : (
                         item.trackingNumber
                       )}
                     </button>
-
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-zinc-100 group-hover:text-white transition-colors truncate">
-                          {item.title}
-                        </span>
-                        {getTypeBadge(item.type)}
-                        {item.team && (
-                          <span className="rounded bg-indigo-950/40 text-indigo-300/80 px-1.5 py-0.2 text-[10px] font-medium border border-indigo-500/20">
-                            {item.team.name}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex items-center gap-2.5 text-xs text-zinc-400 flex-wrap">
-                        <span className="text-zinc-300">{item.systemArea}</span>
-                        <span className="text-zinc-700">•</span>
-                        <span>Due: {formatDueDate(item.dueDate)}</span>
-                        <span className="text-zinc-700">•</span>
-                        <span className="font-mono text-[10px] text-zinc-500">v{item.version}</span>
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Right Column: Priority, Status, Assignee, Actions */}
-                  <div className="flex items-center gap-4 shrink-0 sm:self-center pl-7 sm:pl-0">
-                    <div className="w-24 shrink-0">{getPriorityIndicator(item.priority)}</div>
+                  {/* Title & Metadata Badges */}
+                  <div className="flex items-center gap-2 min-w-0 pr-2 my-1 sm:my-0">
+                    <span className="text-[12px] font-medium text-zinc-200 group-hover:text-white transition-colors truncate">
+                      {item.title}
+                    </span>
+                    {getTypeBadge(item.type)}
+                    {item.team && (
+                      <span className="hidden md:inline rounded bg-white/[0.03] text-zinc-400 px-1.5 py-0.2 text-[9px] font-mono border border-white/[0.05]">
+                        {item.team.name}
+                      </span>
+                    )}
+                    <span className="hidden lg:inline text-[10px] text-zinc-400 font-mono">
+                      · {item.systemArea} {item.dueDate ? `· Due ${formatDueDate(item.dueDate)}` : ""}
+                    </span>
+                  </div>
 
-                    <div className="w-28 shrink-0">{getStatusBadge(item.status)}</div>
+                  {/* Status */}
+                  <div className="shrink-0">{getStatusBadge(item.status)}</div>
 
-                    {/* Assignee / Claim Button */}
-                    <div className="w-32 shrink-0">
-                      {item.assignee ? (
-                        <div className="flex items-center gap-2">
-                          <Avatar size="sm" className="size-6 border border-white/[0.1]">
-                            <AvatarFallback className="bg-zinc-800 text-[10px] text-zinc-300 font-medium">
-                              {item.assignee.avatarInitials ||
-                                item.assignee.name.slice(0, 2).toUpperCase()}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="text-xs text-zinc-300 truncate">
-                            {item.assignee.name.split(" ")[0]}
-                          </span>
-                        </div>
-                      ) : (
-                        <Button
-                          size="icon-xs"
-                          disabled={claimingId === item.id}
-                          onClick={(e) => handleClaim(e, item)}
-                          className="h-6 px-2 text-[11px] bg-indigo-600/80 hover:bg-indigo-600 text-white gap-1 cursor-pointer font-medium"
-                        >
-                          {claimingId === item.id ? (
-                            <Loader2 className="size-3 animate-spin" />
-                          ) : (
-                            <UserCheck className="size-3" />
-                          )}
-                          Claim
-                        </Button>
-                      )}
-                    </div>
+                  {/* Priority */}
+                  <div className="shrink-0">{getPriorityIndicator(item.priority)}</div>
 
-                    {/* Action Dropdown */}
+                  {/* Assignee / Claim */}
+                  <div className="shrink-0 min-w-0">
+                    {item.assignee ? (
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Avatar size="sm" className="size-5 border border-white/[0.1] shrink-0">
+                          <AvatarFallback className="bg-zinc-800 text-[9px] text-zinc-300 font-medium">
+                            {item.assignee.avatarInitials ||
+                              item.assignee.name.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-[11px] text-zinc-300 truncate">
+                          {item.assignee.name.split(" ")[0]}
+                        </span>
+                      </div>
+                    ) : (
+                      <Button
+                        size="icon-xs"
+                        disabled={claimingId === item.id}
+                        onClick={(e) => handleClaim(e, item)}
+                        className="h-5 px-1.5 text-[10px] bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] rounded gap-1 cursor-pointer"
+                      >
+                        {claimingId === item.id ? (
+                          <Loader2 className="size-2.5 animate-spin" />
+                        ) : (
+                          <UserCheck className="size-2.5" />
+                        )}
+                        <span>Claim</span>
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Action Menu */}
+                  <div className="flex justify-end shrink-0" onClick={(e) => e.stopPropagation()}>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-zinc-500 hover:text-zinc-300 focus-visible:ring-1 focus-visible:ring-indigo-500/50"
+                        <button
+                          type="button"
+                          className="size-6 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05] transition-colors"
                           aria-label={`Actions for ${item.trackingNumber}`}
                         >
                           <MoreHorizontal className="size-3.5" />
-                        </Button>
+                        </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent
                         align="end"
-                        className="w-48 border-white/[0.08] bg-[#141418] text-zinc-200 shadow-xl"
+                        className="w-44 border-white/[0.08] bg-[#121316] text-zinc-200 shadow-2xl p-1"
                       >
-                        <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                          {item.trackingNumber} Actions
+                        <DropdownMenuLabel className="text-[10px] font-mono uppercase text-zinc-400 px-2 py-1">
+                          {item.trackingNumber}
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator className="bg-white/[0.06]" />
                         <DropdownMenuItem
                           onClick={(e) => handleCopyId(e, item.trackingNumber)}
-                          className="text-xs cursor-pointer hover:bg-white/[0.05]"
+                          className="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.05]"
                         >
-                          <Copy className="mr-2 size-3.5 text-zinc-400" />
+                          <Copy className="mr-2 size-3 text-zinc-400" />
                           <span>Copy Tracking #</span>
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => openItemDetails(item.id)}
-                          className="text-xs cursor-pointer hover:bg-white/[0.05]"
+                          className="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.05]"
                         >
-                          <ArrowRight className="mr-2 size-3.5 text-indigo-400" />
-                          <span>View Details & Audit</span>
+                          <ArrowRight className="mr-2 size-3 text-indigo-400" />
+                          <span>Open Details</span>
                         </DropdownMenuItem>
                         {!item.assignee && (
                           <DropdownMenuItem
                             onClick={(e) => handleClaim(e, item)}
-                            className="text-xs cursor-pointer hover:bg-white/[0.05] text-indigo-300"
+                            className="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.05] text-indigo-300"
                           >
-                            <UserCheck className="mr-2 size-3.5" />
-                            <span>Claim to Myself</span>
+                            <UserCheck className="mr-2 size-3" />
+                            <span>Claim to Me</span>
                           </DropdownMenuItem>
                         )}
                       </DropdownMenuContent>
@@ -710,16 +691,16 @@ export function WorkQueue() {
         ) : (
           /* Empty State */
           <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-            <div className="flex size-11 items-center justify-center rounded-xl border border-white/[0.08] bg-zinc-900/80 text-zinc-400">
-              <Inbox className="size-5" />
+            <div className="flex size-9 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] text-zinc-400">
+              <Inbox className="size-4" />
             </div>
-            <h3 className="mt-3 text-sm font-medium text-zinc-200">
-              No work items found
+            <h3 className="mt-3 text-xs font-medium text-zinc-200">
+              No work items match filter
             </h3>
-            <p className="mt-1 text-xs text-zinc-400 max-w-sm">
+            <p className="mt-0.5 text-[11px] text-zinc-400 max-w-sm">
               {searchQuery
-                ? `No items match "${searchQuery}" under the active filter.`
-                : `There are currently no work items under the active filter.`}
+                ? `No items match "${searchQuery}".`
+                : `There are currently no items in this filter view.`}
             </p>
             <Button
               variant="outline"
@@ -729,39 +710,42 @@ export function WorkQueue() {
                 setSearchQuery("")
                 setPage(0)
               }}
-              className="mt-4 border-white/[0.08] bg-zinc-900 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer"
+              className="mt-3 border-white/[0.08] bg-zinc-900 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer h-7"
             >
-              Reset all filters
+              Reset filter
             </Button>
           </div>
         )}
 
         {/* Pagination Footer */}
         {isAuthenticated && totalElements > 0 && (
-          <div className="mt-3.5 flex items-center justify-between border-t border-white/[0.04] pt-3 text-xs text-zinc-400">
+          <div className="flex items-center justify-between border-t border-white/[0.05] px-3.5 py-2 text-[11px] text-zinc-400 bg-[#090a0d]">
             <span>
-              Page {page + 1} of {totalPages} ({totalElements} items total)
+              Showing <span className="text-zinc-200 font-mono font-medium">{page * 10 + 1}–{Math.min((page + 1) * 10, totalElements)}</span> of <span className="text-zinc-200 font-mono font-medium">{totalElements}</span>
             </span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className="text-zinc-400 text-[10px] font-mono mr-1">
+                Page {page + 1}/{totalPages}
+              </span>
               <Button
                 variant="outline"
                 size="icon-xs"
                 disabled={page <= 0 || isLoading}
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                className="size-7 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30"
+                className="size-6 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30 rounded cursor-pointer"
                 aria-label="Previous page"
               >
-                <ChevronLeft className="size-3.5" />
+                <ChevronLeft className="size-3" />
               </Button>
               <Button
                 variant="outline"
                 size="icon-xs"
                 disabled={page >= totalPages - 1 || isLoading}
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                className="size-7 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30"
+                className="size-6 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30 rounded cursor-pointer"
                 aria-label="Next page"
               >
-                <ChevronRight className="size-3.5" />
+                <ChevronRight className="size-3" />
               </Button>
             </div>
           </div>

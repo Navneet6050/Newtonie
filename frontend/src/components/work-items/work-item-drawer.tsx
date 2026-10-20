@@ -513,7 +513,7 @@ export function WorkItemDrawer({
                       {/* Add Comment Form */}
                       <form onSubmit={handlePostComment} className="space-y-2">
                         {commentError && (
-                          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+                          <div className="flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
                             <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
                             <span>{commentError}</span>
                           </div>
@@ -522,11 +522,18 @@ export function WorkItemDrawer({
                           <textarea
                             value={newComment}
                             onChange={(e) => setNewComment(e.target.value)}
+                            onKeyDown={(e) => {
+                              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+                                e.preventDefault()
+                                const fakeEvent = { preventDefault: () => {} } as React.FormEvent
+                                handlePostComment(fakeEvent)
+                              }
+                            }}
                             disabled={isPostingComment}
-                            placeholder="Add an operational update or triage note..."
+                            placeholder="Add a comment or incident update (⌘↵ to post)..."
                             rows={3}
                             maxLength={5000}
-                            className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] p-3 text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-indigo-500/70 focus-visible:ring-2 focus-visible:ring-indigo-500/20 outline-none"
+                            className="w-full resize-none rounded-lg border border-white/[0.08] bg-[#16171d] p-2.5 text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-indigo-500/70 focus-visible:ring-1 focus-visible:ring-indigo-500/20 outline-none"
                           />
                         </div>
                         <div className="flex items-center justify-between">
@@ -537,7 +544,7 @@ export function WorkItemDrawer({
                             type="submit"
                             size="sm"
                             disabled={isPostingComment || !newComment.trim()}
-                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3 h-7 gap-1.5 cursor-pointer disabled:opacity-40"
+                            className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-2.5 h-6.5 gap-1.5 cursor-pointer disabled:opacity-40 rounded"
                           >
                             {isPostingComment ? (
                               <>
@@ -547,7 +554,8 @@ export function WorkItemDrawer({
                             ) : (
                               <>
                                 <Send className="size-3" />
-                                <span>Post Comment</span>
+                                <span>Post</span>
+                                <kbd className="hidden sm:inline text-[9px] font-mono opacity-60">⌘↵</kbd>
                               </>
                             )}
                           </Button>

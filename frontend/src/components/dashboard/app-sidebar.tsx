@@ -9,10 +9,8 @@ import {
   LayoutDashboard,
   LogOut,
   MoreVertical,
-  Settings,
   Users2,
   X,
-  Briefcase,
   Check,
   LogIn,
 } from "lucide-react"
@@ -159,7 +157,7 @@ export function AppSidebar({
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs transition-opacity lg:hidden"
+          className="fixed inset-0 z-40 bg-black/75 backdrop-blur-xs transition-opacity lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -170,272 +168,204 @@ export function AppSidebar({
         id="app-sidebar"
         aria-label="Application Sidebar"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-white/[0.07] bg-[#0b0b0e] transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-60 flex-col border-r border-white/[0.06] bg-[#090a0d] transition-transform duration-200 ease-in-out lg:static lg:z-auto lg:translate-x-0 select-none",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Top Brand Header */}
-        <div className="flex h-14 items-center justify-between border-b border-white/[0.06] px-4">
-          <div className="flex items-center gap-2.5">
-            {/* Geometric Mark */}
-            <div className="relative flex size-7 items-center justify-center rounded-lg border border-indigo-500/30 bg-gradient-to-b from-indigo-500/20 to-violet-600/10 shadow-xs">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 24 24"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-indigo-400"
-                aria-hidden="true"
-              >
-                <path
-                  d="M12 2L2 7L12 12L22 7L12 2Z"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M2 17L12 22L22 17"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path
-                  d="M2 12L12 17L22 12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </div>
-
-            {/* Wordmark */}
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-semibold tracking-tight text-zinc-100">
-                Newtonite
-              </span>
-              <span className="rounded bg-indigo-500/10 px-1.5 py-0.2 text-[10px] font-mono font-medium text-indigo-400 border border-indigo-500/20">
-                OPS
-              </span>
-            </div>
-          </div>
-
-          {/* Close button for mobile */}
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex size-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200 lg:hidden"
-            aria-label="Close sidebar"
-          >
-            <X className="size-4" />
-          </button>
-        </div>
-
-        {/* Workspace Switcher */}
-        <div className="p-3 border-b border-white/[0.05]">
+        {/* Top Brand & Workspace Header */}
+        <div className="flex h-12 items-center justify-between border-b border-white/[0.05] px-3.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-white/[0.03] p-2 text-left transition-colors hover:border-white/[0.12] hover:bg-white/[0.05] focus-visible:border-indigo-500/60 focus-visible:ring-2 focus-visible:ring-indigo-500/30 outline-none"
-                aria-label={`Current workspace: ${activeWorkspace}. Click to switch workspace.`}
+                className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-white/[0.05] focus-visible:ring-1 focus-visible:ring-indigo-500/50 outline-none cursor-pointer max-w-[200px]"
+                aria-label={`Current workspace: ${activeWorkspace}. Switch workspace`}
               >
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-zinc-800/80 border border-white/[0.06] text-zinc-300">
-                    <Briefcase className="size-3.5 text-zinc-400" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-zinc-200 truncate">
-                      {activeWorkspace}
-                    </div>
-                    <div className="text-[10px] text-zinc-400 truncate">
-                      Enterprise Tier
-                    </div>
-                  </div>
+                <div className="flex size-5.5 shrink-0 items-center justify-center rounded bg-gradient-to-br from-indigo-500/30 to-violet-600/30 border border-indigo-500/40 text-indigo-300">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2L2 7L12 12L22 7L12 2Z" />
+                    <path d="M2 17L12 22L22 17" />
+                    <path d="M2 12L12 17L22 12" />
+                  </svg>
                 </div>
-                <ChevronDown className="size-3.5 shrink-0 text-zinc-400" />
+                <div className="min-w-0">
+                  <span className="text-[12px] font-semibold tracking-tight text-zinc-100 truncate block">
+                    {activeWorkspace}
+                  </span>
+                </div>
+                <ChevronDown className="size-3 shrink-0 text-zinc-400" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="start"
-              className="w-56 border-white/[0.08] bg-[#141418] text-zinc-200"
+              className="w-56 border-white/[0.08] bg-[#121316] text-zinc-200 shadow-2xl p-1"
             >
-              <DropdownMenuLabel className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
-                Workspaces
+              <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 px-2 py-1">
+                Authorized Workspaces
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-white/[0.06]" />
               {availableWorkspaces.map((ws) => (
                 <DropdownMenuItem
                   key={ws.id}
                   onClick={() => handleSelectWorkspace(ws)}
-                  className="flex items-center justify-between text-xs cursor-pointer hover:bg-white/[0.05] focus:bg-white/[0.05]"
+                  className="flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06] focus:bg-white/[0.06]"
                 >
                   <div>
                     <div className="font-medium text-zinc-200">{ws.name}</div>
-                    <div className="text-[10px] text-zinc-400">{ws.role}</div>
+                    <div className="text-[10px] text-zinc-400 font-mono">{ws.role}</div>
                   </div>
                   {activeWorkspace === ws.name && (
-                    <Check className="size-3.5 text-indigo-400" />
+                    <Check className="size-3.5 text-indigo-400 shrink-0" />
                   )}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
 
-        {/* Main Navigation */}
-        <nav className="flex-1 overflow-y-auto px-2 py-3" aria-label="Main Navigation">
-          <div className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
-            Platform Navigation
-          </div>
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive = activeNav === item.key
-
-              return (
-                <li key={item.key}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onNavSelect(item.key)
-                      onClose()
-                    }}
-                    className={cn(
-                      "group relative flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs font-medium transition-all outline-none",
-                      isActive
-                        ? "bg-indigo-500/10 text-indigo-300 border border-indigo-500/25 shadow-xs"
-                        : "text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200 border border-transparent"
-                    )}
-                    aria-current={isActive ? "page" : undefined}
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <Icon
-                        className={cn(
-                          "size-4 transition-colors",
-                          isActive
-                            ? "text-indigo-400"
-                            : "text-zinc-400 group-hover:text-zinc-300"
-                        )}
-                        aria-hidden="true"
-                      />
-                      <span>{item.label}</span>
-                    </div>
-
-                    {item.badge && (
-                      <span
-                        className={cn(
-                          "rounded px-1.5 py-0.5 text-[10px] font-mono",
-                          isActive
-                            ? "bg-indigo-500/20 text-indigo-300"
-                            : "bg-zinc-800/80 text-zinc-400"
-                        )}
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-
-                    {isActive && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-0.5 rounded-r bg-indigo-500"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        </nav>
-
-        {/* Bottom Section: Settings & User Profile */}
-        <div className="mt-auto border-t border-white/[0.06] p-2 space-y-1 bg-black/20">
+          {/* Close button for mobile */}
           <button
             type="button"
-            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-xs font-medium text-zinc-400 hover:bg-white/[0.03] hover:text-zinc-200 transition-colors"
-            aria-label="Settings"
+            onClick={onClose}
+            className="flex size-6 items-center justify-center rounded text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 lg:hidden"
+            aria-label="Close sidebar"
           >
-            <Settings className="size-4 text-zinc-400" />
-            <span>Settings</span>
+            <X className="size-3.5" />
           </button>
+        </div>
 
-          {/* User Profile */}
-          <div className="pt-1">
-            {isAuthenticated && user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between rounded-lg p-2 text-left transition-colors hover:bg-white/[0.04] focus-visible:border-indigo-500/60 focus-visible:ring-2 focus-visible:ring-indigo-500/30 outline-none cursor-pointer"
-                    aria-label={`${user.name}, profile settings`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="relative">
-                        <Avatar size="sm" className="size-8 border border-white/[0.1]">
-                          <AvatarFallback className="bg-indigo-950/80 text-indigo-200 font-semibold text-xs border border-indigo-500/30">
-                            {user.avatarInitials || user.name.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span
-                          className="absolute -bottom-0.5 -right-0.5 size-2 rounded-full bg-emerald-500 ring-2 ring-[#0b0b0e]"
-                          title="Active / Online"
+        {/* Navigation Body */}
+        <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4" aria-label="Main Navigation">
+          <div>
+            <div className="px-2 mb-1 text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+              Operations
+            </div>
+            <ul className="space-y-0.5">
+              {navItems.map((item) => {
+                const Icon = item.icon
+                const isActive = activeNav === item.key
+
+                return (
+                  <li key={item.key}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onNavSelect(item.key)
+                        onClose()
+                      }}
+                      className={cn(
+                        "group flex w-full items-center justify-between rounded-md px-2 py-1.5 text-[12px] font-medium transition-all outline-none cursor-pointer",
+                        isActive
+                          ? "bg-white/[0.08] text-zinc-100 shadow-xs"
+                          : "text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200"
+                      )}
+                      aria-current={isActive ? "page" : undefined}
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <Icon
+                          className={cn(
+                            "size-3.5 shrink-0 transition-colors",
+                            isActive
+                              ? "text-indigo-400"
+                              : "text-zinc-400 group-hover:text-zinc-300"
+                          )}
                           aria-hidden="true"
                         />
+                        <span className="truncate">{item.label}</span>
                       </div>
-                      <div className="min-w-0">
-                        <div className="text-xs font-medium text-zinc-200 truncate">
-                          {user.name}
-                        </div>
-                        <div className="text-[10px] text-zinc-400 truncate">
-                          {user.systemRole === "ADMIN" ? "System Admin" : "Team Member"}
-                        </div>
-                      </div>
-                    </div>
-                    <MoreVertical className="size-3.5 shrink-0 text-zinc-400" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="w-52 border-white/[0.08] bg-[#141418] text-zinc-200"
-                >
-                  <DropdownMenuLabel>
-                    <div className="text-xs font-medium text-zinc-200">{user.name}</div>
-                    <div className="text-[10px] text-zinc-400">{user.email}</div>
-                    <div className="mt-1 text-[9px] font-mono text-indigo-400 uppercase">
-                      {user.systemRole}
-                    </div>
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator className="bg-white/[0.06]" />
-                  <DropdownMenuItem
-                    onClick={() => setShowLoginModal(true)}
-                    className="text-xs cursor-pointer hover:bg-white/[0.05]"
-                  >
-                    Switch Operator
-                  </DropdownMenuItem>
-                  <DropdownMenuSeparator className="bg-white/[0.06]" />
-                  <DropdownMenuItem
-                    onClick={logout}
-                    className="text-xs cursor-pointer text-rose-400 hover:bg-rose-500/10"
-                  >
-                    <LogOut className="mr-2 size-3.5" />
-                    Sign Out
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <button
-                type="button"
-                onClick={() => setShowLoginModal(true)}
-                className="flex w-full items-center justify-center gap-2 rounded-lg border border-indigo-500/30 bg-indigo-500/10 p-2 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors cursor-pointer"
-              >
-                <LogIn className="size-3.5" />
-                Sign In
-              </button>
-            )}
+
+                      {item.badge && (
+                        <span
+                          className={cn(
+                            "rounded px-1.5 py-0.2 text-[10px] font-mono",
+                            isActive
+                              ? "bg-indigo-500/20 text-indigo-300"
+                              : "bg-zinc-800 text-zinc-400"
+                          )}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
           </div>
+        </nav>
+
+        {/* Bottom Section: Operator Profile & Status */}
+        <div className="mt-auto border-t border-white/[0.06] p-2 bg-[#08080a]">
+          {isAuthenticated && user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between rounded-md p-1.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:ring-1 focus-visible:ring-indigo-500/50 outline-none cursor-pointer"
+                  aria-label={`${user.name}, operator profile`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="relative">
+                      <Avatar size="sm" className="size-6 border border-white/[0.1]">
+                        <AvatarFallback className="bg-zinc-800 text-indigo-300 font-semibold text-[10px]">
+                          {user.avatarInitials || user.name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span
+                        className="absolute -bottom-0.5 -right-0.5 size-1.5 rounded-full bg-emerald-400 ring-1 ring-[#08080a]"
+                        title="Online"
+                        aria-hidden="true"
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[12px] font-medium text-zinc-200 truncate leading-tight">
+                        {user.name}
+                      </div>
+                      <div className="text-[10px] font-mono text-zinc-400 truncate leading-tight">
+                        {user.systemRole === "ADMIN" ? "ADMIN" : "OPERATOR"}
+                      </div>
+                    </div>
+                  </div>
+                  <MoreVertical className="size-3 shrink-0 text-zinc-400" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                className="w-52 border-white/[0.08] bg-[#121316] text-zinc-200 shadow-2xl p-1"
+              >
+                <DropdownMenuLabel className="px-2 py-1.5">
+                  <div className="text-xs font-medium text-zinc-200">{user.name}</div>
+                  <div className="text-[10px] text-zinc-400 font-mono">{user.email}</div>
+                  <div className="mt-1 text-[9px] font-mono text-indigo-400 uppercase">
+                    Role: {user.systemRole}
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator className="bg-white/[0.06]" />
+                <DropdownMenuItem
+                  onClick={() => setShowLoginModal(true)}
+                  className="text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.05]"
+                >
+                  Switch Operator
+                </DropdownMenuItem>
+                <DropdownMenuSeparator className="bg-white/[0.06]" />
+                <DropdownMenuItem
+                  onClick={logout}
+                  className="text-xs cursor-pointer rounded px-2 py-1.5 text-rose-400 hover:bg-rose-500/10"
+                >
+                  <LogOut className="mr-2 size-3.5" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowLoginModal(true)}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md border border-indigo-500/30 bg-indigo-500/10 p-1.5 text-xs font-medium text-indigo-300 hover:bg-indigo-500/20 transition-colors cursor-pointer"
+            >
+              <LogIn className="size-3.5" />
+              Sign In
+            </button>
+          )}
         </div>
       </aside>
     </>

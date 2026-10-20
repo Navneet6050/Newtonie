@@ -116,22 +116,22 @@ export function DashboardHeader({
   }, [handleSearchChange])
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-white/[0.07] bg-[#09090b]/80 px-4 backdrop-blur-md">
+    <header className="sticky top-0 z-30 flex h-11 w-full items-center justify-between border-b border-white/[0.06] bg-[#08090c]/80 px-3.5 backdrop-blur-md select-none">
       {/* Left Area: Mobile Menu Trigger + Breadcrumb */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
         <button
           type="button"
           onClick={onOpenSidebar}
-          className="flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 lg:hidden focus-visible:ring-2 focus-visible:ring-indigo-500/50 outline-none"
+          className="flex size-7 items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 lg:hidden focus-visible:ring-1 focus-visible:ring-indigo-500/50 outline-none"
           aria-label={sidebarOpen ? "Close navigation menu" : "Open navigation menu"}
           aria-expanded={sidebarOpen}
           aria-controls="app-sidebar"
         >
-          <Menu className="size-4" />
+          <Menu className="size-3.5" />
         </button>
 
         {/* Breadcrumb Navigation */}
-        <nav aria-label="Breadcrumb" className="flex items-center text-xs">
+        <nav aria-label="Breadcrumb" className="flex items-center text-[12px]">
           <ol className="flex items-center gap-1.5 text-zinc-400">
             <li>
               <span className="hover:text-zinc-300 transition-colors">
@@ -151,13 +151,13 @@ export function DashboardHeader({
       </div>
 
       {/* Middle Area: Search Input */}
-      <div className="flex flex-1 items-center justify-center px-4 max-w-md mx-auto">
+      <div className="flex flex-1 items-center justify-center px-4 max-w-sm mx-auto">
         <div className="relative w-full">
           <label htmlFor="search-work-items" className="sr-only">
             Search work items
           </label>
           <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-2.5 text-zinc-400">
-            <Search className="size-3.5" aria-hidden="true" />
+            <Search className="size-3" aria-hidden="true" />
           </div>
           <input
             ref={searchInputRef}
@@ -165,10 +165,10 @@ export function DashboardHeader({
             type="search"
             value={currentSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
-            placeholder="Search work items…"
-            className="h-8 w-full rounded-lg border border-white/[0.08] bg-white/[0.03] pl-8 pr-14 text-xs text-zinc-100 placeholder:text-zinc-400 transition-colors hover:border-white/[0.14] focus:border-indigo-500/60 focus:bg-white/[0.05] focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+            placeholder="Search operations queue…"
+            className="h-7 w-full rounded-md border border-white/[0.07] bg-white/[0.02] pl-7 pr-12 text-[12px] text-zinc-100 placeholder:text-zinc-400 transition-colors hover:border-white/[0.12] focus:border-indigo-500/60 focus:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-indigo-500/20"
           />
-          <div className="absolute inset-y-0 right-0 flex items-center pr-2 gap-1">
+          <div className="absolute inset-y-0 right-0 flex items-center pr-1.5 gap-1">
             {currentSearch && (
               <button
                 type="button"
@@ -176,10 +176,10 @@ export function DashboardHeader({
                 className="text-zinc-400 hover:text-zinc-200 p-0.5"
                 aria-label="Clear search text"
               >
-                <X className="size-3" />
+                <X className="size-2.5" />
               </button>
             )}
-            <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-white/[0.08] bg-zinc-900/90 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+            <kbd className="hidden sm:inline-flex items-center rounded border border-white/[0.08] bg-zinc-900 px-1 py-0.2 font-mono text-[9px] text-zinc-400">
               ⌘K
             </kbd>
           </div>
@@ -187,14 +187,14 @@ export function DashboardHeader({
       </div>
 
       {/* Right Area: Actions, Notifications, Profile */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5">
         {/* Quick Action Button */}
         <Button
           size="sm"
           onClick={onNewItemClick}
-          className="hidden md:inline-flex h-8 gap-1.5 border border-indigo-500/30 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 hover:text-indigo-200 hover:border-indigo-500/50 text-xs font-medium cursor-pointer"
+          className="hidden md:inline-flex h-7 gap-1 bg-indigo-600 hover:bg-indigo-500 text-white text-[12px] font-medium px-2.5 rounded-md cursor-pointer shadow-xs"
         >
-          <Plus className="size-3.5" />
+          <Plus className="size-3" />
           <span>New Item</span>
         </Button>
 
@@ -203,12 +203,12 @@ export function DashboardHeader({
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              className="relative flex size-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors focus-visible:ring-2 focus-visible:ring-indigo-500/40 outline-none"
+              className="relative flex size-7 items-center justify-center rounded-md border border-white/[0.06] bg-white/[0.02] text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200 transition-colors focus-visible:ring-1 focus-visible:ring-indigo-500/40 outline-none cursor-pointer"
               aria-label={`Notifications, ${unreadCount} unread operational alerts`}
             >
-              <Bell className="size-4" />
+              <Bell className="size-3.5" />
               {unreadCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-indigo-500 ring-2 ring-[#09090b]" />
+                <span className="absolute top-1 right-1 size-1.5 rounded-full bg-indigo-500 ring-1 ring-[#08090c]" />
               )}
             </button>
           </DropdownMenuTrigger>

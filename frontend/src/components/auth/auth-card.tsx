@@ -10,7 +10,6 @@ import {
   Lock,
   Mail,
   ShieldAlert,
-  Building2,
   UserCheck,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
@@ -101,47 +100,47 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
   return (
     <div
       className={cn(
-        "w-full max-w-[420px] transition-all",
+        "w-full max-w-[380px] transition-all",
         isModal
           ? "p-1"
-          : "surface-overlay rounded-2xl p-7 border border-white/[0.08] shadow-2xl"
+          : "rounded-xl border border-white/[0.08] bg-[#0d0e12] p-6 shadow-2xl"
       )}
     >
       {/* Brand & Security Header */}
-      <div className="space-y-1.5">
+      <div className="space-y-1">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="flex size-7 items-center justify-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
-              <Lock className="size-3.5" />
+          <div className="flex items-center gap-1.5">
+            <div className="flex size-6 items-center justify-center rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+              <Lock className="size-3" />
             </div>
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
+            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
               Operations Access
             </span>
           </div>
-          <span className="flex items-center gap-1 rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300">
+          <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-0.5 text-[9px] font-mono text-zinc-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Local Node
           </span>
         </div>
 
-        <h1 className="text-xl font-bold tracking-tight text-zinc-100">
+        <h1 className="text-lg font-semibold tracking-tight text-zinc-100 pt-1">
           Sign In to Newtonite
         </h1>
-        <p className="text-xs text-zinc-400 leading-relaxed">
-          Access your team’s authorized operations queue and incident triage.
+        <p className="text-[11px] text-zinc-400 leading-normal">
+          Authenticate to access authorized team queue and triage.
         </p>
       </div>
 
-      {/* Quick Fill Dev Chips */}
-      <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-2.5">
-        <div className="flex items-center justify-between mb-2">
-          <span className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300/90">
-            <ShieldAlert className="size-3 text-amber-400" />
-            <span>Dev-Only Test Accounts</span>
+      {/* Developer Quick-Fill Profiles */}
+      <div className="mt-3.5 rounded-lg border border-white/[0.06] bg-white/[0.02] p-2">
+        <div className="flex items-center justify-between mb-1.5">
+          <span className="flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider text-amber-400/90 font-medium">
+            <ShieldAlert className="size-2.5 text-amber-400" />
+            <span>Dev-Only Test Profiles</span>
           </span>
-          <span className="text-[10px] text-zinc-500">Quick Fill</span>
+          <span className="text-[9px] font-mono text-zinc-400">Quick Fill</span>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-3 gap-1">
           {SEED_USERS.map((seed) => {
             const isSelected = activeSeedEmail === seed.email && email === seed.email
             return (
@@ -150,14 +149,14 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
                 type="button"
                 onClick={() => handleSelectSeed(seed)}
                 className={cn(
-                  "flex items-center justify-center gap-1 rounded-lg border px-2 py-1.5 text-[11px] font-medium transition-all cursor-pointer",
+                  "flex items-center justify-center gap-1 rounded border px-1.5 py-1 text-[10px] font-mono transition-all cursor-pointer",
                   isSelected
-                    ? "border-amber-400/60 bg-amber-500/20 text-amber-200 shadow-xs"
-                    : "border-white/[0.06] bg-black/40 text-zinc-400 hover:border-amber-500/30 hover:bg-black/60 hover:text-zinc-200"
+                    ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-200"
+                    : "border-white/[0.06] bg-black/30 text-zinc-400 hover:border-white/[0.12] hover:text-zinc-200"
                 )}
                 title={`${seed.name} (${seed.role}) · ${seed.team}`}
               >
-                <UserCheck className="size-3 shrink-0" />
+                <UserCheck className="size-2.5 shrink-0" />
                 <span className="truncate">{seed.shortLabel}</span>
               </button>
             )
@@ -169,26 +168,26 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
       {error && (
         <div
           role="alert"
-          className="mt-3.5 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-in fade-in duration-150"
+          className="mt-3 flex items-start gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300 animate-in fade-in duration-150"
         >
-          <AlertCircle className="size-4 shrink-0 text-rose-400 mt-0.5" />
-          <div className="flex-1">
-            <div className="font-semibold text-rose-200 text-xs">Authentication Failed</div>
-            <div className="text-[11px] text-rose-300/90 mt-0.5">{error}</div>
+          <AlertCircle className="size-3.5 shrink-0 text-rose-400 mt-0.5" />
+          <div className="flex-1 text-[11px]">
+            <span className="font-semibold text-rose-200">Auth Error: </span>
+            <span>{error}</span>
           </div>
         </div>
       )}
 
       {/* Credentials Form */}
-      <form onSubmit={handleSubmit} className="mt-4 space-y-3.5 text-xs">
+      <form onSubmit={handleSubmit} className="mt-3.5 space-y-3 text-xs">
         {/* Email Field */}
         <div className="space-y-1">
-          <label htmlFor="auth-email" className="font-medium text-zinc-300 flex items-center justify-between">
+          <label htmlFor="auth-email" className="font-medium text-zinc-300 text-[11px] flex items-center justify-between">
             <span>Corporate Email</span>
-            <span className="text-[10px] text-zinc-500 font-normal">e.g. operator@acme.internal</span>
+            <span className="text-[10px] text-zinc-400 font-mono">acme.internal</span>
           </label>
           <div className="relative">
-            <Mail className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+            <Mail className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
             <Input
               id="auth-email"
               type="email"
@@ -200,22 +199,19 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
                 setEmail(e.target.value)
                 setActiveSeedEmail(null)
               }}
-              placeholder="name@company.com"
-              className="h-9 pl-9 bg-white/[0.03] border-white/[0.08] text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-indigo-500/70 focus-visible:ring-indigo-500/20"
+              placeholder="operator@acme.internal"
+              className="h-8 pl-8 bg-white/[0.02] border-white/[0.08] text-xs text-zinc-100 placeholder:text-zinc-500 rounded-md focus-visible:border-indigo-500/70 focus-visible:ring-indigo-500/20"
             />
           </div>
         </div>
 
         {/* Password Field */}
         <div className="space-y-1">
-          <div className="flex items-center justify-between">
-            <label htmlFor="auth-password" className="font-medium text-zinc-300">
-              Password
-            </label>
-            <span className="text-[10px] text-zinc-500 font-normal">Required</span>
-          </div>
+          <label htmlFor="auth-password" className="font-medium text-zinc-300 text-[11px]">
+            Password
+          </label>
           <div className="relative">
-            <KeyRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+            <KeyRound className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
             <Input
               id="auth-password"
               type={showPassword ? "text" : "password"}
@@ -228,29 +224,29 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
                 setActiveSeedEmail(null)
               }}
               placeholder="••••••••••••"
-              className="h-9 pl-9 pr-9 bg-white/[0.03] border-white/[0.08] text-xs text-zinc-100 placeholder:text-zinc-500 focus-visible:border-indigo-500/70 focus-visible:ring-indigo-500/20"
+              className="h-8 pl-8 pr-8 bg-white/[0.02] border-white/[0.08] text-xs text-zinc-100 placeholder:text-zinc-500 rounded-md focus-visible:border-indigo-500/70 focus-visible:ring-indigo-500/20"
             />
             <button
               type="button"
               onClick={() => setShowPassword((prev) => !prev)}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors p-1"
-              aria-label={showPassword ? "Hide password text" : "Show password text"}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-200 transition-colors p-0.5"
+              aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              {showPassword ? <EyeOff className="size-3" /> : <Eye className="size-3" />}
             </button>
           </div>
         </div>
 
         {/* Remember Session Option */}
         <div className="flex items-center justify-between pt-0.5">
-          <label className="flex items-center gap-2 cursor-pointer text-zinc-400 hover:text-zinc-300 select-none text-[11px]">
+          <label className="flex items-center gap-1.5 cursor-pointer text-zinc-400 hover:text-zinc-300 select-none text-[11px]">
             <input
               type="checkbox"
               checked={rememberDevice}
               onChange={(e) => setRememberDevice(e.target.checked)}
-              className="size-3.5 rounded border border-white/[0.15] bg-white/[0.03] text-indigo-600 focus:ring-indigo-500/30"
+              className="size-3 rounded border border-white/[0.15] bg-white/[0.03] text-indigo-600 focus:ring-0"
             />
-            <span>Remember session on this device</span>
+            <span>Remember session</span>
           </label>
         </div>
 
@@ -258,31 +254,22 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
         <Button
           type="submit"
           disabled={isSubmitting}
-          className="w-full h-9 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs cursor-pointer shadow-sm transition-all duration-150 disabled:opacity-50 mt-1"
+          className="w-full h-8 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-md cursor-pointer shadow-xs transition-all duration-150 disabled:opacity-50 mt-1"
         >
           {isSubmitting ? (
             <span className="flex items-center gap-2">
-              <Loader2 className="size-3.5 animate-spin" />
-              <span>Verifying Credentials…</span>
+              <Loader2 className="size-3 animate-spin" />
+              <span>Verifying…</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1.5">
-              <Lock className="size-3.5" />
-              <span>Sign In to Operations Console</span>
-            </span>
+            <span>Sign In to Console</span>
           )}
         </Button>
       </form>
 
       {/* Honest SSO Notice */}
-      <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-2.5 text-[11px]">
-        <div className="flex items-center gap-1.5 text-zinc-300 font-medium">
-          <Building2 className="size-3.5 text-indigo-400 shrink-0" />
-          <span>Enterprise SSO (SAML 2.0 / OIDC)</span>
-        </div>
-        <p className="mt-1 text-zinc-400 leading-normal text-[10px]">
-          Identity federation is unconfigured in this local sandbox. Authenticate using the pre-seeded development accounts above.
-        </p>
+      <div className="mt-3.5 pt-3 border-t border-white/[0.05] text-[10px] text-zinc-400 font-mono leading-tight">
+        Enterprise SSO (SAML 2.0 / OIDC) unconfigured in local sandbox.
       </div>
     </div>
   )

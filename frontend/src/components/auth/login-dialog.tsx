@@ -12,12 +12,12 @@ export function LoginDialog() {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-150"
       role="dialog"
       aria-modal="true"
       aria-labelledby="login-dialog-title"
     >
-      <div className="relative w-full max-w-md rounded-2xl border border-white/[0.08] surface-overlay p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-sm rounded-xl border border-white/[0.08] bg-[#0f1013] p-5 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
         {/* Close Button (if user is authenticated, e.g. switching accounts) */}
         {user && (
           <button

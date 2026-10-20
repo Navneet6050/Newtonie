@@ -85,20 +85,20 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
     <div
       role="region"
       aria-label="Queue status distribution"
-      className="surface-subtle rounded-xl p-3.5 border border-white/[0.06] space-y-2.5"
+      className="rounded-lg border border-white/[0.06] bg-[#0c0d10] p-2.5 space-y-2"
     >
       {/* Top Header Label */}
-      <div className="flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between text-[11px]">
+        <div className="flex items-center gap-1.5">
           <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-300">
-            Queue Status Distribution
+          <span className="font-medium text-zinc-300">
+            Queue Distribution
           </span>
-          <span className="text-[11px] text-zinc-500">
-            ({totalCount} items across authorized workspace)
+          <span className="text-zinc-500 font-mono text-[10px]">
+            ({totalCount} items)
           </span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs font-mono text-zinc-400">
+        <div className="flex items-center gap-1 text-[11px] font-mono text-zinc-400">
           <span className="text-zinc-200 font-semibold tabular-nums">{completedPct}%</span>
           <span>resolved</span>
         </div>
@@ -106,7 +106,7 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
 
       {/* Segmented Distribution Bar */}
       <div
-        className="flex h-2 w-full overflow-hidden rounded-full bg-zinc-900 border border-white/[0.05]"
+        className="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-900 border border-white/[0.04]"
         role="meter"
         aria-label={`Status distribution: ${completedPct}% completed, ${inProgressPct}% in progress, ${openPct}% open, ${reviewPct}% review, ${blockedPct}% blocked`}
         aria-valuenow={completedPct}
@@ -127,15 +127,15 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
       </div>
 
       {/* Bottom Segment Legend */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5 text-[11px]">
+      <div className="flex flex-wrap items-center gap-x-3.5 gap-y-1 text-[10px]">
         {segments.map((seg) => (
-          <div key={seg.name} className="flex items-center gap-1.5">
+          <div key={seg.name} className="flex items-center gap-1">
             <span className={cn("size-1.5 rounded-full shrink-0", seg.dotColor)} aria-hidden="true" />
-            <span className="text-zinc-400">{seg.name}</span>
+            <span className="text-zinc-400">{seg.name}:</span>
             <span className={cn("font-mono font-medium tabular-nums", seg.textColor)}>
               {seg.count}
             </span>
-            <span className="text-[10px] text-zinc-600 font-mono">({seg.pct}%)</span>
+            <span className="text-[9px] text-zinc-500 font-mono">({seg.pct}%)</span>
           </div>
         ))}
       </div>
