@@ -1,6 +1,8 @@
 import * as React from "react"
 import { type LucideIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { CountUp } from "@/components/ui/count-up"
+import { SpotlightCard } from "@/components/ui/spotlight-card"
 
 export interface MetricCardProps {
   title: string
@@ -37,7 +39,7 @@ export function MetricCard({
   }[statusVariant]
 
   return (
-    <div
+    <SpotlightCard
       role="region"
       aria-label={`${title}: ${value}. ${contextLabel}`}
       className="group relative flex flex-col justify-between rounded-lg border border-white/[0.06] bg-[#0c0d10] p-3 transition-colors hover:border-white/[0.12] hover:bg-[#0f1013]"
@@ -51,13 +53,13 @@ export function MetricCard({
 
       <div className="mt-2 flex items-baseline justify-between gap-2">
         <span className="text-xl font-bold tracking-tight text-zinc-100 tabular-nums">
-          {value}
+          <CountUp value={value} />
         </span>
         <span className="text-[11px] text-zinc-400 truncate">
           {contextLabel}
         </span>
       </div>
-    </div>
+    </SpotlightCard>
   )
 }
 

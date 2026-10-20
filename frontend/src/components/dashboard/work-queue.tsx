@@ -43,6 +43,9 @@ import {
   fetchWorkItems,
 } from "@/lib/api"
 import { CreateItemDialog } from "@/components/work-items/create-item-dialog"
+import { motion } from "motion/react"
+
+let queueIntroPlayed = false
 
 type FilterType = "all" | "high_priority" | "in_progress" | "review_needed" | "blocked"
 
@@ -63,6 +66,10 @@ export function WorkQueue() {
   const [page, setPage] = React.useState(0)
   const [totalPages, setTotalPages] = React.useState(1)
   const [totalElements, setTotalElements] = React.useState(0)
+
+  React.useEffect(() => {
+    if (items.length > 0) queueIntroPlayed = true
+  }, [items.length])
 
   const [isLoading, setIsLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -300,9 +307,12 @@ export function WorkQueue() {
       case "URGENT":
         return (
           <div className="flex items-center gap-1.5 text-[11px] text-rose-400 font-medium" title="Priority: Urgent (P0)">
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-rose-500 shrink-0">
-              <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 4.5a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zm.75 6.75a.875.875 0 100-1.75.875.875 0 000 1.75z" clipRule="evenodd" />
-            </svg>
+            <span className="relative inline-flex">
+              <span className="absolute inset-0 animate-ping rounded-full bg-red-500/40 [animation-duration:2.4s] motion-reduce:animate-none" />
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-rose-500 shrink-0">
+                <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 4.5a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zm.75 6.75a.875.875 0 100-1.75.875.875 0 000 1.75z" clipRule="evenodd" />
+              </svg>
+            </span>
             <span className="font-medium text-rose-400">Urgent</span>
           </div>
         )
@@ -384,13 +394,20 @@ export function WorkQueue() {
                     setPage(0)
                   }}
                   className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    "relative rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
                     activeFilter === "all"
-                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      ? "text-zinc-100"
                       : "text-zinc-400 hover:text-zinc-200"
                   )}
                 >
-                  All
+                  {activeFilter === "all" && (
+                    <motion.span
+                      layoutId="queue-filter-pill"
+                      className="absolute inset-0 rounded-md bg-white/[0.08]"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                  <span className="relative z-10">All</span>
                 </button>
                 <button
                   type="button"
@@ -399,13 +416,20 @@ export function WorkQueue() {
                     setPage(0)
                   }}
                   className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    "relative rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
                     activeFilter === "high_priority"
-                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      ? "text-zinc-100"
                       : "text-zinc-400 hover:text-zinc-200"
                   )}
                 >
-                  Urgent & High
+                  {activeFilter === "high_priority" && (
+                    <motion.span
+                      layoutId="queue-filter-pill"
+                      className="absolute inset-0 rounded-md bg-white/[0.08]"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                  <span className="relative z-10">Urgent & High</span>
                 </button>
                 <button
                   type="button"
@@ -414,13 +438,20 @@ export function WorkQueue() {
                     setPage(0)
                   }}
                   className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    "relative rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
                     activeFilter === "in_progress"
-                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      ? "text-zinc-100"
                       : "text-zinc-400 hover:text-zinc-200"
                   )}
                 >
-                  In Progress
+                  {activeFilter === "in_progress" && (
+                    <motion.span
+                      layoutId="queue-filter-pill"
+                      className="absolute inset-0 rounded-md bg-white/[0.08]"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                  <span className="relative z-10">In Progress</span>
                 </button>
                 <button
                   type="button"
@@ -429,13 +460,20 @@ export function WorkQueue() {
                     setPage(0)
                   }}
                   className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    "relative rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
                     activeFilter === "review_needed"
-                      ? "bg-white/[0.1] text-zinc-100 shadow-xs"
+                      ? "text-zinc-100"
                       : "text-zinc-400 hover:text-zinc-200"
                   )}
                 >
-                  Review Needed
+                  {activeFilter === "review_needed" && (
+                    <motion.span
+                      layoutId="queue-filter-pill"
+                      className="absolute inset-0 rounded-md bg-white/[0.08]"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                  <span className="relative z-10">Review Needed</span>
                 </button>
                 <button
                   type="button"
@@ -444,13 +482,20 @@ export function WorkQueue() {
                     setPage(0)
                   }}
                   className={cn(
-                    "rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
+                    "relative rounded px-2 py-0.5 font-medium transition-colors cursor-pointer",
                     activeFilter === "blocked"
-                      ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 shadow-xs"
+                      ? "text-rose-300"
                       : "text-zinc-400 hover:text-zinc-200"
                   )}
                 >
-                  Blocked
+                  {activeFilter === "blocked" && (
+                    <motion.span
+                      layoutId="queue-filter-pill"
+                      className="absolute inset-0 rounded-md bg-white/[0.08]"
+                      transition={{ type: "spring", stiffness: 500, damping: 40 }}
+                    />
+                  )}
+                  <span className="relative z-10">Blocked</span>
                 </button>
               </div>
             </div>
@@ -556,15 +601,18 @@ export function WorkQueue() {
               <span>Status</span>
               <span>Priority</span>
               <span>Assignee</span>
-              <span className="text-right">Act</span>
+              <span className="text-right"><span className="sr-only">Actions</span></span>
             </div>
 
             {/* List Rows */}
             <div className="divide-y divide-white/[0.03]">
-              {items.map((item) => (
-                <div
+              {items.map((item, index) => (
+                <motion.div
                   key={item.id}
                   onClick={() => openItemDetails(item.id)}
+                  initial={queueIntroPlayed ? false : { opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: "easeOut", delay: Math.min(index, 10) * 0.035 }}
                   className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_100px_110px_36px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none"
                 >
                   {/* Issue Key / Tracking Number */}
@@ -622,19 +670,19 @@ export function WorkQueue() {
                         </span>
                       </div>
                     ) : (
-                      <Button
-                        size="icon-xs"
+                      <button
+                        type="button"
                         disabled={claimingId === item.id}
                         onClick={(e) => handleClaim(e, item)}
-                        className="h-5 px-1.5 text-[10px] bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-zinc-200 border border-white/[0.06] rounded gap-1 cursor-pointer"
+                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/80 transition hover:bg-white/[0.08] hover:text-white cursor-pointer disabled:opacity-50"
                       >
                         {claimingId === item.id ? (
-                          <Loader2 className="size-2.5 animate-spin" />
+                          <Loader2 className="size-3 animate-spin" />
                         ) : (
-                          <UserCheck className="size-2.5" />
+                          <UserCheck className="size-3" />
                         )}
                         <span>Claim</span>
-                      </Button>
+                      </button>
                     )}
                   </div>
 
@@ -644,7 +692,7 @@ export function WorkQueue() {
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="size-6 flex items-center justify-center rounded text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.05] transition-colors"
+                          className="flex size-7 items-center justify-center rounded-md text-white/45 transition hover:bg-white/[0.08] hover:text-white"
                           aria-label={`Actions for ${item.trackingNumber}`}
                         >
                           <MoreHorizontal className="size-3.5" />
@@ -684,7 +732,7 @@ export function WorkQueue() {
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>
-                </div>
+                </motion.div>
               ))}
             </div>
           </div>

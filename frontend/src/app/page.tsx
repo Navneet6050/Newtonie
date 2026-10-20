@@ -116,7 +116,10 @@ function DashboardContent() {
         {/* Live Cluster Status & Telemetry Pill */}
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
-            <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
+            <span className="relative flex size-2" aria-hidden="true">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/60 [animation-duration:2s] motion-reduce:animate-none" />
+              <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
+            </span>
             <span>OPS CLUSTER ONLINE</span>
           </div>
           <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400">

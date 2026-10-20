@@ -1,8 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { motion } from "motion/react"
 import { type BackendWorkItemMetrics } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { SpotlightCard } from "@/components/ui/spotlight-card"
+
+let gaugeIntroPlayed = false
 
 interface OpsDistributionGaugeProps {
   metrics: BackendWorkItemMetrics | null
@@ -10,6 +14,10 @@ interface OpsDistributionGaugeProps {
 }
 
 export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaugeProps) {
+  const [animateIn] = React.useState(() => !gaugeIntroPlayed)
+  React.useEffect(() => {
+    gaugeIntroPlayed = true
+  }, [])
   if (isLoading) {
     return (
       <div className="surface-subtle rounded-xl p-3 border border-white/[0.06] animate-pulse space-y-2">
@@ -82,7 +90,7 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
   ]
 
   return (
-    <div
+    <SpotlightCard
       role="region"
       aria-label="Queue status distribution"
       className="rounded-lg border border-white/[0.06] bg-[#0c0d10] p-2.5 space-y-2"
@@ -108,7 +116,10 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
       </div>
 
       {/* Segmented Distribution Bar */}
-      <div
+      <motion.div
+        initial={animateIn ? { clipPath: "inset(0 100% 0 0)" } : false}
+        animate={{ clipPath: "inset(0 0% 0 0)" }}
+        transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
         className="flex h-1.5 w-full overflow-hidden rounded-full bg-zinc-900 border border-white/[0.04]"
         role="meter"
         aria-label={`Status distribution: ${openCount} open, ${inProgressCount} in progress, ${reviewNeededCount} review, ${blockedCount} blocked, ${completedCount} completed`}
@@ -127,7 +138,7 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
             />
           )
         })}
-      </div>
+      </motion.div>
 
       {/* Bottom Segment Legend */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px]">
@@ -142,6 +153,6 @@ export function OpsDistributionGauge({ metrics, isLoading }: OpsDistributionGaug
           </div>
         ))}
       </div>
-    </div>
+    </SpotlightCard>
   )
 }
