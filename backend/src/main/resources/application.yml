@@ -1,14 +1,14 @@
 server:
-  port: ${SERVER_PORT:8080}
+  port: ${PORT:${SERVER_PORT:8080}}
 
 spring:
   application:
     name: newtonite-backend
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/newtonite}
-    username: ${SPRING_DATASOURCE_USERNAME:newtonite}
-    password: ${SPRING_DATASOURCE_PASSWORD:newtonite}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5433}/${POSTGRES_DB:newtonite}}
+    username: ${SPRING_DATASOURCE_USERNAME:${POSTGRES_USER:newtonite}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${POSTGRES_PASSWORD:newtonite}}
     driver-class-name: org.postgresql.Driver
     hikari:
       maximum-pool-size: 10
