@@ -1,125 +1,425 @@
+<div align="center">
+
 # Newtonite
 
-Newtonite is a high-performance internal operations and work-management platform for engineering teams. It provides real-time work-item tracking, team workspaces, activity auditing, and operational command dashboards.
+**A secure, team-scoped operations work-management platform**
+for tracking incidents, tasks and bugs with auditable history and safe concurrent updates.
 
-## Repository Layout
+![Java](https://img.shields.io/badge/Java-25-ED8B00?logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-6DB33F?logo=springboot&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Next.js](https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white)
 
+[Live demo](https://newtonie.vercel.app) · [Engineering decisions](./ENGINEERING_DECISIONS.md) · [API reference](#api-reference) · [Run locally](#getting-started)
+
+</div>
+
+---
+
+## Table of contents
+
+- [Overview](#overview)
+- [Highlights](#highlights)
+- [How the challenge requirements are met](#how-the-challenge-requirements-are-met)
+- [Architecture](#architecture)
+- [Data model](#data-model)
+- [Work-item lifecycle](#work-item-lifecycle)
+- [Authentication and authorization](#authentication-and-authorization)
+- [Concurrency and correctness](#concurrency-and-correctness)
+- [Collaboration and history](#collaboration-and-history)
+- [Search, filtering and pagination](#search-filtering-and-pagination)
+- [Frontend](#frontend)
+- [API reference](#api-reference)
+- [Repository structure](#repository-structure)
+- [Getting started](#getting-started)
+- [Configuration](#configuration)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Known limitations](#known-limitations)
+- [Future improvements](#future-improvements)
+
+---
+
+## Overview
+
+Operational work at a growing company often lives in chat threads, spreadsheets and email. Requests disappear, ownership is unclear, and nobody can say what changed or why.
+
+Newtonite replaces that with one internal web application. Every request is a **work item** with a type, priority, status, owner, due date, discussion thread and an immutable activity trail. Access is enforced **on the server, per team**, and the hard cases (two people claiming the same item, editing a stale version, retrying a request) are handled deliberately instead of left to chance.
+
+![Newtonite operations dashboard](./docs/screenshots/dashboard.png)
+
+---
+
+## Highlights
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <b>Team-scoped access</b><br/>
+      Stateless JWT auth. Every read and write is authorized server-side against the caller's team memberships. Admins have global access.
+    </td>
+    <td width="33%" valign="top">
+      <b>Atomic claiming</b><br/>
+      Claiming is a single conditional database update. When two operators race, exactly one wins and the other gets <code>409 Conflict</code>.
+    </td>
+    <td width="33%" valign="top">
+      <b>Optimistic locking</b><br/>
+      Updates carry the version they were based on (<code>If-Match</code> or <code>expectedVersion</code>). Stale writes are rejected, never silently merged.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <b>Idempotent creates</b><br/>
+      <code>Idempotency-Key</code> makes retried creates safe. Keys are scoped per user, and a reused key with a different payload is rejected.
+    </td>
+    <td valign="top">
+      <b>Enforced workflow</b><br/>
+      Status changes follow an explicit state machine. <code>COMPLETED</code> is terminal and cannot be reopened by ordinary updates.
+    </td>
+    <td valign="top">
+      <b>Immutable audit trail</b><br/>
+      Creation, status, priority and ownership changes are recorded as activity entries, alongside a per-item comment thread.
+    </td>
+  </tr>
+  <tr>
+    <td valign="top">
+      <b>Built to grow</b><br/>
+      Search, filtering, sorting and pagination all run on the server. The browser only ever holds one page of results.
+    </td>
+    <td valign="top">
+      <b>Operational overview</b><br/>
+      Live counters, a status-distribution bar and a filterable queue show what needs attention first.
+    </td>
+    <td valign="top">
+      <b>Tested where it matters</b><br/>
+      Integration tests target the dangerous behaviours: races, stale writes, duplicate requests, cross-team access.
+    </td>
+  </tr>
+</table>
+
+---
+
+## How the challenge requirements are met
+
+| Brief requirement | How Newtonite addresses it |
+|---|---|
+| Create and manage work items | Full create, list, view and partial-update API with typed items (`INCIDENT`, `TASK`, `BUG`, `OPS`), priorities and due dates |
+| What it is and why it exists | Title, description, type and system area on every item |
+| Current state and importance | Status workflow (`OPEN` to `COMPLETED`) plus `URGENT` / `HIGH` / `MEDIUM` / `LOW` priority |
+| Who is responsible | Assignee and reporter on each item, one-click claim for unassigned work |
+| What happened previously | Immutable activity history with actor, field, old value and new value |
+| What needs attention next | Dashboard counters for open, in-progress, blocked and urgent work, queue filters and due dates |
+| Teams, identity and access | JWT authentication, team memberships with roles, server-enforced resource-level authorization |
+| Collaboration and history | Per-item comments and a paginated audit trail |
+| Concurrent usage | Atomic claim, optimistic locking and idempotency (see [below](#concurrency-and-correctness)) |
+| Usable at scale | Server-side search, filtering, sorting and bounded pagination |
+| Engineering decisions | [`ENGINEERING_DECISIONS.md`](./ENGINEERING_DECISIONS.md) |
+| Automated tests | Backend integration suites for security, concurrency, idempotency and workflow (see [Testing](#testing)) |
+| Known limitations | [Listed below](#known-limitations) |
+
+### Critical behaviours beyond CRUD
+
+| # | Behaviour | Mechanism | Verified by |
+|---|---|---|---|
+| 1 | Two users claim the same item | Conditional `UPDATE ... WHERE assignee_id IS NULL` | `ConcurrentClaimingTests` |
+| 2 | A user edits a stale version | `@Version` plus `If-Match` / `expectedVersion` | `OptimisticLockingTests` |
+| 3 | A user retries a create | User-scoped `Idempotency-Key` with payload comparison | `IdempotencyTests` |
+| 4 | Invalid status jumps | Server-side state machine | `WorkItemWorkflowTests` |
+| 5 | Access to another team's data | Resource-level team authorization on every operation | `SecurityAuthTests` |
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U([Browser]) -->|HTTPS| FE["Next.js 16 frontend<br/>React 19 · TypeScript · Tailwind"]
+    FE -->|"REST /api<br/>Bearer JWT"| SEC
+
+    subgraph BE["Spring Boot 3.5 · Java 25"]
+        direction TB
+        SEC["JWT filter<br/>SecurityCurrentUserProvider"] --> CTRL["REST controllers<br/>validation · error mapping"]
+        CTRL --> SVC["Services<br/>work items · teams · activity"]
+        SVC --> REPO["Spring Data JPA<br/>repositories"]
+    end
+
+    REPO --> DB[("PostgreSQL 16<br/>Flyway migrations")]
 ```
-newtonite/
-├── .env.example              # Safe local environment variable defaults
-├── .gitignore                # Git ignore rules for workspace, secrets, and build targets
-├── compose.yaml              # Docker Compose service definition for PostgreSQL 16
-├── ENGINEERING_DECISIONS.md  # Key architectural decisions, concurrency models & trade-offs
-├── backend/                  # Spring Boot 3.5.0 modular monolith (Java 25)
-│   ├── .mvn/wrapper/         # Maven Wrapper configuration
-│   ├── mvnw / mvnw.cmd       # Maven Wrapper scripts
-│   ├── pom.xml               # Backend dependencies and build configuration
-│   ├── src/main/java/        # Application sources (com.newtonite.*)
-│   │   ├── config/           # Security, Web & CORS configuration
-│   │   ├── common/           # Error models and development identity provider
-│   │   ├── workitem/         # Work item entity, service, repository, and REST API
-│   │   ├── team/             # Teams and Users entity models and repositories
-│   │   └── activity/         # Immutable audit logging and idempotency service
-│   ├── src/main/resources/   # Configuration (application.yml) and Flyway migrations (V1, V2)
-│   └── src/test/java/        # Integration, concurrency, idempotency & workflow tests
-└── frontend/                 # Next.js 16 + TypeScript + Tailwind CSS application
-    ├── src/app/              # App Router pages and layouts
-    ├── src/components/       # UI components and dashboard shell
-    └── src/lib/              # Typed API client and utility helpers
+
+The backend is a **modular monolith**. One deployable, with clear package boundaries:
+
+| Package | Responsibility |
+|---|---|
+| `config` | Security, web and CORS configuration |
+| `common` | Error models and shared infrastructure |
+| `workitem` | Work-item entity, service, repository and REST API |
+| `team` | Teams, users and memberships |
+| `activity` | Immutable audit logging and idempotency records |
+
+A monolith keeps transactions simple and consistency strong at the scale this system targets, while the package boundaries leave room to split later.
+
+---
+
+## Data model
+
+Simplified conceptual model. The authoritative schema is in the Flyway migrations under `backend/src/main/resources`.
+
+```mermaid
+erDiagram
+    USER ||--o{ TEAM_MEMBERSHIP : "belongs to"
+    TEAM ||--o{ TEAM_MEMBERSHIP : "has members"
+    TEAM ||--o{ WORK_ITEM : owns
+    USER ||--o{ WORK_ITEM : "reports or is assigned"
+    WORK_ITEM ||--o{ COMMENT : "discussed in"
+    WORK_ITEM ||--o{ ACTIVITY_LOG : "audited by"
+    USER ||--o{ IDEMPOTENCY_RECORD : "scopes"
+
+    USER {
+        uuid id
+        string email
+        string system_role
+    }
+    TEAM_MEMBERSHIP {
+        string role
+    }
+    WORK_ITEM {
+        uuid id
+        string tracking_number
+        string type
+        string status
+        string priority
+        string system_area
+        timestamp due_date
+        long version
+    }
+    ACTIVITY_LOG {
+        string action_type
+        string field_name
+        string from_value
+        string to_value
+        timestamp timestamp
+    }
+    IDEMPOTENCY_RECORD {
+        uuid user_id
+        string key
+    }
 ```
 
 ---
 
-## Prerequisites
+## Work-item lifecycle
 
-- **Java Development Kit (JDK) 25** (e.g. Eclipse Adoptium OpenJDK 25)
-- **Docker Desktop** (for containerized PostgreSQL 16)
-- **Node.js 18+** and **npm** (for frontend development)
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN
+    OPEN --> IN_PROGRESS
+    OPEN --> BLOCKED
+    IN_PROGRESS --> REVIEW_NEEDED
+    IN_PROGRESS --> COMPLETED
+    IN_PROGRESS --> BLOCKED
+    REVIEW_NEEDED --> IN_PROGRESS
+    REVIEW_NEEDED --> COMPLETED
+    REVIEW_NEEDED --> BLOCKED
+    BLOCKED --> OPEN
+    BLOCKED --> IN_PROGRESS
+    BLOCKED --> REVIEW_NEEDED
+    COMPLETED --> [*]
+```
+
+| From | Allowed next states |
+|---|---|
+| `OPEN` | `IN_PROGRESS`, `BLOCKED` |
+| `IN_PROGRESS` | `REVIEW_NEEDED`, `COMPLETED`, `BLOCKED` |
+| `REVIEW_NEEDED` | `IN_PROGRESS`, `COMPLETED`, `BLOCKED` |
+| `BLOCKED` | `OPEN`, `IN_PROGRESS`, `REVIEW_NEEDED` |
+| `COMPLETED` | None. Terminal state, reopening returns `409 Conflict` |
+
+Resubmitting an item's current status is accepted as a no-op and does not create an activity entry.
 
 ---
 
-## Quickstart & Local Development
+## Authentication and authorization
 
-### 1. Environment Setup
+**Authentication.** Stateless Bearer JWT signed with HMAC-SHA256 (`jjwt 0.12.6`). Passwords are hashed with BCrypt (10 rounds). The caller's identity comes only from the verified token. Client-supplied identity headers such as `X-User-Id` are ignored. Bad credentials return a generic `401` that does not reveal whether an account exists.
 
-Copy `.env.example` to `.env` or use safe local defaults:
+**Authorization.** Enforced in the backend for every operation, never only in the UI.
 
-```powershell
-Copy-Item .env.example .env
+```mermaid
+flowchart TD
+    R([Request]) --> T{"Valid JWT?"}
+    T -- No --> E401["401 Unauthorized"]
+    T -- Yes --> A{"System role ADMIN?"}
+    A -- Yes --> OK(["Allowed: all teams"])
+    A -- No --> M{"Member of the item's team?"}
+    M -- No --> E403["403 Forbidden"]
+    M -- Yes --> OK2(["Allowed: own teams only"])
 ```
 
-Default local development settings:
-- **PostgreSQL Port**: `5433` (mapped to container port `5432` to avoid host service port collisions)
-- **Database Name**: `newtonite`
-- **Database User / Password**: `newtonite` / `newtonite`
-- **Backend API URL**: `http://localhost:8080/api`
-- **Frontend URL**: `http://localhost:3000`
+| Rule | Behaviour |
+|---|---|
+| `ADMIN` system role | Global access across all teams |
+| Team members (`MEMBER`, `TEAM_LEAD`) | Restricted to teams they belong to |
+| Cross-team read, update, claim, activity | `403 Forbidden` |
+| Assigning to a non-member of the item's team | `400 Bad Request` |
+| `GET /api/work-items?teamId=` for an unauthorized team | `403 Forbidden` |
+| Unfiltered list queries | Automatically scoped to the caller's teams |
 
-### 2. Start PostgreSQL Database
-
-Launch the containerized PostgreSQL 16 instance with persistent volume and healthcheck:
-
-```powershell
-docker compose up -d
-```
-
-Verify that the container is healthy:
-```powershell
-docker compose ps
-```
-
-### 3. Start Backend (Spring Boot)
-
-Set your terminal session to JDK 25 without modifying global system environment variables:
-
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.7-hotspot"
-cd backend
-.\mvnw.cmd spring-boot:run
-```
-
-On Linux / macOS:
-```bash
-export JAVA_HOME=/path/to/jdk-25
-cd backend
-./mvnw spring-boot:run
-```
-
-Health check endpoint:
-- [http://localhost:8080/actuator/health](http://localhost:8080/actuator/health) (returns `{"status":"UP"}`)
-
-### 4. Start Frontend (Next.js)
-
-In a separate terminal:
-
-```powershell
-cd frontend
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) to view the Newtonite operations dashboard.
+**Registration.** `POST /api/auth/register` is public and rate-limited (10 requests per minute per IP). It always creates a least-privileged `USER` with no team memberships, so new accounts cannot see any team's data until an administrator assigns them. Public registration cannot create admins or choose teams.
 
 ---
 
-## Work-Item API Reference (Milestone M2)
+## Concurrency and correctness
+
+### Atomic claim
+
+Two operators click "Claim" on the same item at the same moment. The claim is one conditional update, so the database decides the winner.
+
+```mermaid
+sequenceDiagram
+    participant A as Operator A
+    participant B as Operator B
+    participant API as Spring Boot
+    participant DB as PostgreSQL
+
+    A->>API: POST /work-items/{id}/claim
+    B->>API: POST /work-items/{id}/claim
+    API->>DB: UPDATE ... WHERE id = :id AND assignee_id IS NULL
+    DB-->>API: 1 row updated
+    API-->>A: 200 OK
+    API->>DB: UPDATE ... WHERE id = :id AND assignee_id IS NULL
+    DB-->>API: 0 rows updated
+    API-->>B: 409 Conflict
+```
+
+There is no read-then-write gap to race through, and no application-level lock to coordinate.
+
+### Optimistic locking
+
+Two users edit from the same version. The second write is rejected instead of overwriting the first.
+
+```mermaid
+sequenceDiagram
+    participant A as User A
+    participant B as User B
+    participant API as Spring Boot
+
+    A->>API: GET item (version 3)
+    B->>API: GET item (version 3)
+    A->>API: PATCH with If-Match "3"
+    API-->>A: 200 OK (version 4)
+    B->>API: PATCH with If-Match "3"
+    API-->>B: 409 Conflict (stale version)
+```
+
+Items carry a JPA `@Version`. Clients send the version they read via the `If-Match` header or `expectedVersion` in the body.
+
+### Idempotent creates
+
+A user retries `POST /api/work-items` because they are unsure the first attempt succeeded.
+
+```mermaid
+flowchart TD
+    Q(["POST with Idempotency-Key"]) --> L{"Record for<br/>user + key exists?"}
+    L -- No --> X["Create item and store response"]
+    X --> C(["201 Created"])
+    L -- Yes --> S{"Same payload?"}
+    S -- Yes --> P(["Replay the stored response<br/>no duplicate item"])
+    S -- No --> F(["Rejected as a conflict"])
+```
+
+Records use a composite key of `(user_id, key)`, so one user's key can never collide with or replay another user's request.
+
+### Workflow enforcement
+
+Invalid transitions are rejected on the server. Terminal `COMPLETED` items cannot be reopened by ordinary updates.
+
+---
+
+## Collaboration and history
+
+- **Activity history.** Every meaningful change (creation, status, priority, ownership) is written as an immutable entry recording the actor, the field, the previous value and the new value. Available through a paginated endpoint.
+- **Comments.** Each item has a discussion thread. Posting a comment also generates an activity entry. Team isolation applies: other teams get `403`, admins can comment across teams, blank content is rejected with `400`.
+- **Item drawer.** The UI shows the details, comments and audit trail for an item in one place.
+
+---
+
+## Search, filtering and pagination
+
+`GET /api/work-items` supports the following query parameters. All filtering, sorting and paging happens in the database, so the browser never loads the full dataset.
+
+| Parameter | Purpose |
+|---|---|
+| `search` | Text search across work items |
+| `status` | Filter by status |
+| `priority` | Filter by one or more priorities (comma-separated, for example `URGENT,HIGH`) |
+| `type` | Filter by item type |
+| `teamId` | Scope to one team (must be authorized) |
+| `assigneeId` | Items assigned to a user (powers "My Work") |
+| `systemArea` | Filter by system area |
+| `page`, `size` | Bounded pagination |
+| `sort` | Sort order, for example `updatedAt,desc` |
+
+Paged responses return `content`, `page`, `size`, `totalElements`, `totalPages`, `first` and `last`.
+
+---
+
+## Frontend
+
+A Next.js 16 App Router application in TypeScript and Tailwind CSS.
+
+| Area | Details |
+|---|---|
+| Overview | Four live metric cards, a status-distribution bar and the active operations queue |
+| Queue | Filter tabs (All, Urgent and High, In Progress, Review Needed, Blocked), debounced server-side search, paginated table, type badges, status pills, priority icons |
+| Actions | Create dialog, detail drawer, one-click claim, row menu (copy tracking number, open details) |
+| Workspaces | Workspace switcher scoped to the user's authorized teams |
+| Keyboard | `Ctrl/Cmd + K` focuses search |
+| Login | Animated sign-in page with a lightweight 3D scene (`react-three-fiber`, `motion`), disabled under `prefers-reduced-motion` |
+
+**State management.** The server is the source of truth. The frontend uses React context for authentication and dashboard state, plus a typed API client (`frontend/src/lib/api.ts`). After a mutation, the changed row is reconciled with the server's response and metrics are refetched. If a claim fails, the queue reloads and the error is shown with a retry. A `401` from any call clears the session and opens the sign-in modal.
+
+---
+
+## API reference
+
+Base path: `/api`. All endpoints except login, register and health require `Authorization: Bearer <token>`.
 
 ### Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/work-items` | Create a new work item. Supports optional `Idempotency-Key` header. Returns `201 Created` with `Location`. |
-| `GET` | `/api/work-items` | List & search work items with multi-field filtering and bounded pagination. |
-| `GET` | `/api/work-items/{id}` | Retrieve a single work item by UUID or return `404 Not Found`. |
-| `PATCH` | `/api/work-items/{id}` | Partial update with optimistic locking (`expectedVersion` or `If-Match` header). |
-| `POST` | `/api/work-items/{id}/claim` | Atomically claim an unassigned work item. Rejects races with `409 Conflict`. |
-| `GET` | `/api/work-items/{id}/activity`| Retrieve paginated immutable activity audit history for a work item. |
+| `POST` | `/api/auth/login` | Authenticate and receive a signed JWT |
+| `POST` | `/api/auth/register` | Public registration (least privilege, rate-limited) |
+| `GET` | `/api/auth/me` | Current user, system role and team memberships |
+| `POST` | `/api/work-items` | Create an item. Optional `Idempotency-Key`. Returns `201` with `Location` |
+| `GET` | `/api/work-items` | List with search, filters and pagination |
+| `GET` | `/api/work-items/metrics` | Counts for the dashboard (optional `teamId`) |
+| `GET` | `/api/work-items/{id}` | Fetch one item |
+| `PATCH` | `/api/work-items/{id}` | Partial update with optimistic locking |
+| `POST` | `/api/work-items/{id}/claim` | Atomically claim an unassigned item |
+| `GET` | `/api/work-items/{id}/activity` | Paginated audit history |
+| `GET` | `/api/work-items/{id}/comments` | List comments |
+| `POST` | `/api/work-items/{id}/comments` | Add a comment (`{ "content": "..." }`) |
+| `GET` | `/actuator/health` | Health probe |
 
-### Sample Requests & Responses
+### Status codes
 
-#### 1. Create a Work Item
+| Code | Meaning |
+|---|---|
+| `200` / `201` | Success / created |
+| `400` | Validation failure, or assignee is not a member of the item's team |
+| `401` | Missing, invalid or expired token, or bad credentials |
+| `403` | Authenticated but not authorized for this team's data |
+| `404` | Item not found |
+| `409` | Lost a claim race, stale version, invalid transition, or idempotency conflict |
+
+### Example: create a work item
+
 ```http
 POST /api/work-items
+Authorization: Bearer <token>
 Content-Type: application/json
 Idempotency-Key: b7a3e9c1-8452-47e2-8921-2a912d7c0301
 
@@ -130,216 +430,183 @@ Idempotency-Key: b7a3e9c1-8452-47e2-8921-2a912d7c0301
   "priority": "URGENT",
   "systemArea": "Data Pipeline",
   "teamId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
-  "assigneeId": "22222222-2222-2222-2222-222222222222",
   "dueDate": "2026-10-25T18:00:00Z"
 }
 ```
-**Response (`201 Created`):**
-```json
-{
-  "id": "e278fc62-6130-4bc3-8007-1872c7bf8418",
-  "trackingNumber": "NEW-1050",
-  "title": "Ingest pipeline memory leak investigation",
-  "description": "Investigate heap dump after sustained 10k ingest spikes.",
-  "type": "INCIDENT",
-  "status": "OPEN",
-  "priority": "URGENT",
-  "systemArea": "Data Pipeline",
-  "team": { "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", "name": "Acme Studio" },
-  "assignee": { "id": "22222222-2222-2222-2222-222222222222", "name": "Sarah Chen", "avatarInitials": "SC", "email": "sarah.chen@acme.internal" },
-  "reporter": { "id": "11111111-1111-1111-1111-111111111111", "name": "Alex Morgan", "avatarInitials": "AM", "email": "alex.morgan@acme.internal" },
-  "dueDate": "2026-10-25T18:00:00Z",
-  "version": 0,
-  "createdAt": "2026-10-20T01:05:00Z",
-  "updatedAt": "2026-10-20T01:05:00Z"
-}
-```
 
-#### 2. Query & Filter Work Items
-```http
-GET /api/work-items?status=OPEN&priority=URGENT&search=pipeline&page=0&size=20&sort=updatedAt,desc
-```
-**Response (`200 OK`):**
-```json
-{
-  "content": [ ... ],
-  "page": 0,
-  "size": 20,
-  "totalElements": 1,
-  "totalPages": 1,
-  "first": true,
-  "last": true
-}
-```
+### Example: update with optimistic locking
 
-#### 3. Update Work Item with Optimistic Locking
 ```http
-PATCH /api/work-items/e278fc62-6130-4bc3-8007-1872c7bf8418
+PATCH /api/work-items/{id}
+Authorization: Bearer <token>
 Content-Type: application/json
 If-Match: "0"
 
-{
-  "expectedVersion": 0,
-  "status": "IN_PROGRESS"
-}
+{ "expectedVersion": 0, "status": "IN_PROGRESS" }
 ```
-*Note: If another client updated this item concurrently, the server returns `409 Conflict` with a version conflict explanation.*
 
-#### 4. Atomically Claim Work Item
+A concurrent change by someone else returns `409 Conflict`.
+
+### Example: claim
+
 ```http
-POST /api/work-items/e278fc62-6130-4bc3-8007-1872c7bf8418/claim
+POST /api/work-items/{id}/claim
+Authorization: Bearer <token>
 ```
-*Note: If two operators attempt to claim simultaneously, exactly one succeeds (`200 OK`) and the second receives `409 Conflict`.*
 
-#### 5. View Activity Audit History
-```http
-GET /api/work-items/e278fc62-6130-4bc3-8007-1872c7bf8418/activity
-```
-**Response (`200 OK`):**
-```json
-{
-  "content": [
-    {
-      "id": "7f8b91a2-1111-4444-8888-999999999999",
-      "workItemId": "e278fc62-6130-4bc3-8007-1872c7bf8418",
-      "actor": { "id": "11111111-1111-1111-1111-111111111111", "name": "Alex Morgan" },
-      "actionType": "STATUS_CHANGED",
-      "fieldName": "status",
-      "fromValue": "OPEN",
-      "toValue": "IN_PROGRESS",
-      "timestamp": "2026-10-20T01:10:00Z"
-    },
-    {
-      "id": "11111111-2222-3333-4444-555555555555",
-      "workItemId": "e278fc62-6130-4bc3-8007-1872c7bf8418",
-      "actor": { "id": "11111111-1111-1111-1111-111111111111", "name": "Alex Morgan" },
-      "actionType": "CREATED",
-      "metadata": "Work item created with tracking number NEW-1050",
-      "timestamp": "2026-10-20T01:05:00Z"
-    }
-  ],
-  "page": 0,
-  "size": 20,
-  "totalElements": 2,
-  "totalPages": 1,
-  "first": true,
-  "last": true
-}
+Exactly one concurrent caller receives `200 OK`. The others receive `409 Conflict`.
+
+---
+
+## Repository structure
+
+```text
+.
+├── .env.example               # Safe local configuration defaults
+├── compose.yaml               # PostgreSQL 16 for local development
+├── ENGINEERING_DECISIONS.md   # Key decisions, trade-offs and rationale
+├── docs/screenshots/          # Images used in this README
+├── backend/                   # Spring Boot 3.5 modular monolith (Java 25)
+│   ├── pom.xml
+│   ├── mvnw, mvnw.cmd         # Maven Wrapper
+│   └── src/
+│       ├── main/java/         # com.newtonite.* (config, common, workitem, team, activity)
+│       ├── main/resources/    # application.yml and Flyway migrations
+│       └── test/java/         # Integration, concurrency, idempotency and security tests
+└── frontend/                  # Next.js 16 + TypeScript + Tailwind CSS
+    └── src/
+        ├── app/               # App Router pages and layouts
+        ├── components/        # Dashboard, work-item, auth and UI components
+        └── lib/               # Typed API client, auth context, utilities
 ```
 
 ---
 
-## State Transition Policy
+## Getting started
 
-Status changes must follow explicit operations transitions:
-- `OPEN` ➔ `IN_PROGRESS`, `BLOCKED`
-- `IN_PROGRESS` ➔ `REVIEW_NEEDED`, `COMPLETED`, `BLOCKED`
-- `REVIEW_NEEDED` ➔ `IN_PROGRESS`, `COMPLETED`, `BLOCKED`
-- `BLOCKED` ➔ `OPEN`, `IN_PROGRESS`, `REVIEW_NEEDED`
-- `COMPLETED` ➔ Terminal state. Cannot be reopened by ordinary updates (returns `409 Conflict`).
-- No-op updates (resubmitting existing status) are accepted cleanly without generating spurious activity entries.
+### Prerequisites
 
----
+| Tool | Version |
+|---|---|
+| JDK | 25 |
+| Docker Desktop | Any recent version (runs PostgreSQL 16) |
+| Node.js | 20.9 or newer (required by Next.js 16) |
+| npm | Bundled with Node.js |
 
----
+### 1. Configure the environment
 
-## Authentication & Team-Level Authorization (Milestone M3)
+```bash
+# Linux / macOS
+cp .env.example .env
+```
 
-### 1. Authentication Design
-- **Protocol**: Stateless Bearer JWT using HMAC-SHA256 (`io.jsonwebtoken:jjwt:0.12.6`).
-- **Password Hashing**: BCrypt with 10 rounds (`BCryptPasswordEncoder`).
-- **Principal Resolution**: `SecurityCurrentUserProvider` extracts the authenticated `UserPrincipal` from `SecurityContextHolder`. Client-supplied identity headers (`X-User-Id`, etc.) are strictly ignored.
-- **Error Handling**: Missing or invalid tokens return structured `401 Unauthorized`. Invalid login credentials return generic `401 Unauthorized` without revealing account existence.
+```powershell
+# Windows PowerShell
+Copy-Item .env.example .env
+```
 
-### 2. Endpoints
-- **`POST /api/auth/login`**: Validates email/password credentials and issues a signed JWT access token.
-- **`GET /api/auth/me`**: Returns the authenticated user's ID, email, name, system role, and team memberships.
+Local defaults: PostgreSQL on host port `5433`, database `newtonite`, API on `http://localhost:8080/api`, frontend on `http://localhost:3000`.
 
-### 3. Team Authorization Matrix
-- **ADMIN** (`system_role = 'ADMIN'`): Global access across all teams.
-- **MEMBER / TEAM_LEAD**: Strictly restricted to teams they belong to.
-- **Cross-Team Read/Write Restrictions**: Operators from Team A cannot read (`403`), update (`403`), claim (`403`), or inspect activity logs (`403`) for work items belonging to Team B.
-- **Cross-Team Assignment Prevention**: Work items cannot be assigned to users who are not members of the item's team (`400 Bad Request`).
-- **Team Filter Scoping**: `GET /api/work-items?teamId=...` for unauthorized teams returns `403 Forbidden`. Unfiltered queries automatically scope results to the operator's authorized teams.
+### 2. Start PostgreSQL
 
-### 4. User-Scoped Idempotency
-- In Flyway migration `V3`, `idempotency_records` uses a composite primary key `(user_id, key)`.
-- Cached responses and collision detection are scoped by composite key `(user_id, key)`, ensuring replay requests are isolated to the originating operator.
+```bash
+docker compose up -d
+docker compose ps        # wait until the container is healthy
+```
 
-### 5. Admin Demo Account (Assignment Evaluation Mode)
-For assignment reviewers evaluating administrator functionality without relying on hardcoded migration credentials:
-- **Email**: `admin@newtonie.com`
-- **Evaluation Password**: `admin123` (configured via server-side environment variable `SECURITY_ADMIN_BOOTSTRAP_PASSWORD`)
-- **System Role**: `ADMIN` (Global access across all workspace queues and activity feeds)
-- **Primary Workspace**: `Acme Studio` (`TEAM_LEAD`)
+### 3. Start the backend
+
+Flyway migrations run automatically on startup.
+
+```bash
+# Linux / macOS
+export JAVA_HOME=/path/to/jdk-25
+cd backend
+./mvnw spring-boot:run
+```
+
+```powershell
+# Windows PowerShell
+$env:JAVA_HOME = "C:\path\to\jdk-25"
+cd backend
+.\mvnw.cmd spring-boot:run
+```
+
+Verify: <http://localhost:8080/actuator/health> returns `{"status":"UP"}`.
+
+### 4. Start the frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://localhost:3000>. In local development, `/api` requests are proxied to `http://localhost:8080`.
+
+### Local development accounts
+
+Flyway seeds development-only users for local verification. On the local sign-in page, use the **Development Test Accounts** panel to fill credentials with one click.
+
+| Name | Email | System role | Team | Team role |
+|---|---|---|---|---|
+| Alex Morgan | `alex.morgan@acme.internal` | `ADMIN` | Acme Studio | `TEAM_LEAD` |
+| Sarah Chen | `sarah.chen@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| Marcus Bell | `marcus.bell@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| Elena Rostova | `elena.rostova@acme.internal` | `USER` | Acme Studio | `MEMBER` |
+| Liam Vance | `liam.vance@acme.internal` | `USER` | Acme Platform | `TEAM_LEAD` |
 
 > [!WARNING]
-> The demo password `admin123` is weak and intended strictly for controlled evaluation environments. The bootstrap mechanism is disabled by default and requires explicit server-side enablement:
-> - **Enablement**: Set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=true` and `SECURITY_ADMIN_BOOTSTRAP_PASSWORD=admin123` on Render / backend.
-> - **Idempotency**: The bootstrap runs on application startup. If the account already exists, it preserves existing credentials and data without recreating rows.
-> - **De-provisioning**: Set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=false` or remove the environment variable to disable provisioning in production.
-
-### 6. Dedicated User Registration & Safe Onboarding
-Newtonite provides a self-service registration flow accessible via `/register` or the "Create account" toggle on the sign-in card:
-- **Endpoint**: `POST /api/auth/register` (publicly accessible, rate-limited at 10 req/min per IP to prevent abuse)
-- **Parameters**: `name` (min 2 chars), `email` (normalized to lowercase), `password` (min 8 chars)
-- **Security Guarantees**:
-  - Always assigns the least-privileged `USER` system role server-side. Public registration cannot create administrator accounts or accept arbitrary team IDs.
-  - Rejects duplicate emails with `409 Conflict`.
-  - Passwords are encrypted with BCrypt (10 rounds).
-- **Safe Workspace Onboarding**:
-  - Newly registered users are created without default team memberships, ensuring zero exposure to existing private team items, discussions, or audit logs.
-  - The dashboard displays an onboarding notice directing operators to request team assignment from the workspace administrator (`admin@newtonie.com`).
-
-### 7. Local Development Accounts (Development-Only)
-The following pre-seeded test accounts are provided strictly for local environment verification. All local development accounts use the development-only password:
-**`NewtoniteDev2026!`** (hashed with BCrypt in Flyway migration `V3`). *These credentials must never be deployed to staging or production environments.*:
-
-| Name | Email | System Role | Primary Team | Team Role |
-| :--- | :--- | :--- | :--- | :--- |
-| **Alex Morgan** | `alex.morgan@acme.internal` | `ADMIN` | Acme Studio | `TEAM_LEAD` |
-| **Sarah Chen** | `sarah.chen@acme.internal` | `USER` | Acme Studio | `MEMBER` |
-| **Marcus Bell** | `marcus.bell@acme.internal` | `USER` | Acme Studio | `MEMBER` |
-| **Elena Rostova** | `elena.rostova@acme.internal` | `USER` | Acme Studio | `MEMBER` |
-| **Liam Vance** | `liam.vance@acme.internal` | `USER` | Acme Platform | `TEAM_LEAD` |
-
+> These accounts exist for local development only. Never use them in a shared or production environment.
 
 ---
 
-## Concurrency & Guarantees
-- **Atomic Claiming**: Evaluated at the database level using `UPDATE ... WHERE id = :id AND assignee_id IS NULL`.
-- **Optimistic Locking**: Enforced via JPA `@Version` and explicit `expectedVersion` or `If-Match` preconditions (`409 Conflict`).
-- **State Transitions**: Validated per state machine; terminal states (`COMPLETED`) cannot be reopened.
+## Configuration
+
+| Variable | Used by | Purpose |
+|---|---|---|
+| `JWT_SECRET` | Backend | HMAC signing secret. Must be set to a strong value outside local development |
+| `SECURITY_ADMIN_BOOTSTRAP_ENABLED` | Backend | Enables startup provisioning of an evaluation admin account. Off by default |
+| `SECURITY_ADMIN_BOOTSTRAP_PASSWORD` | Backend | Password for the bootstrapped admin. Supply it through the host's secret settings |
+| `NEXT_PUBLIC_API_URL` | Frontend | API base URL. Defaults to `/api`, which is proxied to `http://localhost:8080` locally |
+
+Database connection and port settings are documented in [`.env.example`](./.env.example). It contains placeholders and local defaults only. Never commit a real `.env`.
+
+### Evaluation admin account
+
+For reviewers, an admin account can be provisioned at startup without hardcoding credentials in the repository:
+
+1. Set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=true` and `SECURITY_ADMIN_BOOTSTRAP_PASSWORD` on the backend host.
+2. The bootstrap is idempotent. If the account already exists it is left untouched.
+3. After evaluation, set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=false` to disable provisioning.
+
+Reviewer credentials are shared with the submission, not stored in this repository.
 
 ---
 
-## Testing & Verification
+## Testing
 
-### Running Automated Tests
-Run the complete backend integration and security test suite:
+Tests target the behaviours that would be most damaging if wrong.
 
-```powershell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-25.0.4.7-hotspot"
+| Suite | What it protects |
+|---|---|
+| `SecurityAuthTests` | 15 scenarios: login, 401 handling, token expiry, identity-spoofing defense, cross-team read and write isolation (403), cross-team assignment rejection (400), team filter scoping, user-scoped idempotency |
+| `WorkItemCommentTests` | 5 scenarios: team discussion, cross-team denial (403), admin cross-team comments, blank-content rejection (400), activity logging |
+| `ConcurrentClaimingTests` | Simultaneous claims with authenticated actors, so only one succeeds |
+| `OptimisticLockingTests` | Version conflicts and stale-write rejection, `If-Match` preconditions |
+| `IdempotencyTests` | Replay of duplicate requests, payload-mismatch conflicts |
+| `WorkItemWorkflowTests` | Full lifecycle, validation, transition rules and audit entries |
+| `NewtoniteApplicationTests`, `HealthEndpointTests` | Migrations apply cleanly, health probe responds |
+
+```bash
+# Backend: full test suite
 cd backend
-.\mvnw.cmd test
-```
+./mvnw test              # Windows: .\mvnw.cmd test
 
-Test coverage includes:
-1. **`SecurityAuthTests`**: 15 security scenarios covering login success, 401 on bad credentials/unauthenticated requests, token expiry, identity spoofing defense, cross-team read/mutation isolation (403), cross-team assignment rejection (400), team filter scoping, and user-scoped idempotency.
-2. **`WorkItemCommentTests`**: 5 persistent comment collaboration scenarios covering authorized team discussion, cross-team access denial (403), admin cross-team commenting, blank content validation rejection (400), and automated activity log generation.
-3. **`ConcurrentClaimingTests`**: Concurrency under atomic claim with authenticated actors.
-4. **`OptimisticLockingTests`**: Optimistic locking, stale version rejection, ETag preconditions.
-5. **`IdempotencyTests`**: Transactional idempotency, payload mismatch conflict detection.
-6. **`WorkItemWorkflowTests`**: Full lifecycle workflow, validation, and activity log auditing.
-7. **`NewtoniteApplicationTests` & `HealthEndpointTests`**: Database migration validation and health probes.
+# Backend: executable JAR
+./mvnw package
 
-Package executable JAR:
-```powershell
-.\mvnw.cmd package
-```
-
-Frontend verification:
-```powershell
+# Frontend: lint and production build
 cd frontend
 npm run lint
 npm run build
@@ -347,12 +614,49 @@ npm run build
 
 ---
 
-## Current Limitations & Production-Hardening Requirements
+## Deployment
 
-1. **Enterprise SSO Registration**: Google Workspace and Microsoft Entra ID single sign-on require registered OAuth client IDs, client secrets, and authorized redirect URIs in production identity tenants. In this local sandbox, SSO prerequisites are clearly disclosed rather than mocked.
-2. **Browser Automation Sandbox**: Headless browser automation via Playwright was constrained in this sandbox by external network driver download blocks (`playwright.azureedge.net` 404). Verification was executed via full integration suites and live REST client automation.
-3. **Token Storage**: The frontend stores short-lived JWT tokens in `sessionStorage` or `localStorage` depending on operator preference. Production environments should use HTTP-only, SameSite=Strict cookies to guard against XSS token exfiltration.
-4. **Token Revocation**: Stateless JWTs cannot be revoked prior to expiration without a distributed token blacklist (e.g. Redis).
-5. **Brute Force Protection**: `/api/auth/login` does not currently implement IP or account rate-limiting / lockout. Production deployment should introduce Bucket4j or API gateway rate limiting.
-6. **Secret Management**: `JWT_SECRET` must be set via secure environment variables or a secret vault (e.g., AWS Secrets Manager, HashiCorp Vault) rather than the fallback development secret.
+| Component | Host | Notes |
+|---|---|---|
+| Frontend | Vercel ([newtonie.vercel.app](https://newtonie.vercel.app)) | Set `NEXT_PUBLIC_API_URL` to the deployed backend's `/api` URL |
+| Backend | Separate host (Render) | Set `JWT_SECRET`, the database connection and, if needed, the `SECURITY_ADMIN_BOOTSTRAP_*` variables |
+| Database | Managed PostgreSQL 16 | Flyway applies migrations on backend startup |
 
+Configure CORS on the backend to allow the frontend's origin.
+
+---
+
+## Known limitations
+
+| Area | Limitation |
+|---|---|
+| Single sign-on | Google Workspace and Microsoft Entra ID SSO need registered OAuth clients and redirect URIs. It is shown as unconfigured, not mocked |
+| Token storage | Short-lived JWTs are kept in `sessionStorage` or `localStorage`. Production should use HTTP-only, `SameSite=Strict` cookies to reduce XSS exposure |
+| Token revocation | Stateless JWTs cannot be revoked before expiry without a shared blacklist (for example Redis) |
+| Brute-force protection | Login has no IP or account lockout. Registration is rate-limited, login is not |
+| Secrets | `JWT_SECRET` must come from environment variables or a secret manager, not the local fallback |
+| Performance evidence | No load testing has been performed. Scale-readiness comes from design (server-side filtering and pagination), not measured throughput |
+| Real-time updates | Other users' changes appear after a refresh or refetch. There is no live push |
+| Browser automation | End-to-end browser tests are not included. Behaviour is verified through backend integration tests and manual testing |
+
+---
+
+## Future improvements
+
+If the system grew significantly, or with another week of work:
+
+- **Security:** move tokens to HTTP-only cookies, add login rate limiting and lockout, add token revocation, and integrate SSO.
+- **Real-time:** push updates over SSE or WebSocket so users see changes without refreshing.
+- **Asynchronous work:** add an outbox-style queue for notifications and enrichment, with retries and idempotent consumers.
+- **Scale:** load-test the list and search endpoints, add search indexing for text queries, and consider read replicas for the history tables.
+- **Quality:** add end-to-end browser tests and contract tests for the API.
+- **Product:** SLA and due-date alerts, saved views, and bulk actions.
+
+---
+
+<div align="center">
+
+Built for the Newtonite Software Engineering Challenge, *Operations Under Pressure*.
+See [`ENGINEERING_DECISIONS.md`](./ENGINEERING_DECISIONS.md) for the reasoning behind the key trade-offs.
+
+</div>
