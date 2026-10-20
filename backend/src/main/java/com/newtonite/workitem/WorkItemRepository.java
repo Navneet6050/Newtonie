@@ -19,6 +19,8 @@ public interface WorkItemRepository extends JpaRepository<WorkItem, UUID>, JpaSp
 
     boolean existsByTrackingNumber(String trackingNumber);
 
+    long countByTeamId(UUID teamId);
+
     @Query(value = "SELECT nextval('work_item_seq')", nativeQuery = true)
     Long getNextTrackingSequenceValue();
 
