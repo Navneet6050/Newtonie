@@ -321,43 +321,50 @@ export function TeamsView() {
                       </span>
                     </div>
 
-                    <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
-                      {team.members.map((member) => {
-                        const isSelf = member.userId === user?.id
+                    {team.members.length > 0 ? (
+                      <div className="space-y-1 max-h-48 overflow-y-auto pr-1">
+                        {team.members.map((member) => {
+                          const isSelf = member.userId === user?.id
 
-                        return (
-                          <div
-                            key={member.userId}
-                            className={cn(
-                              "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs border border-white/[0.03] transition-colors",
-                              isSelf ? "bg-indigo-500/[0.04] border-indigo-500/20" : "bg-white/[0.01]"
-                            )}
-                          >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Avatar size="sm" className="size-5.5 border border-white/[0.1]">
-                                <AvatarFallback className="bg-indigo-950/80 text-indigo-300 text-[9px] font-semibold">
-                                  {member.avatarInitials || member.name.slice(0, 2).toUpperCase()}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-medium text-zinc-200 truncate block text-[11px]">
-                                    {member.name}
+                          return (
+                            <div
+                              key={member.userId}
+                              className={cn(
+                                "flex items-center justify-between rounded-lg px-2.5 py-1.5 text-xs border border-white/[0.03] transition-colors",
+                                isSelf ? "bg-indigo-500/[0.04] border-indigo-500/20" : "bg-white/[0.01]"
+                              )}
+                            >
+                              <div className="flex items-center gap-2 min-w-0">
+                                <Avatar size="sm" className="size-5.5 border border-white/[0.1]">
+                                  <AvatarFallback className="bg-indigo-950/80 text-indigo-300 text-[9px] font-semibold">
+                                    {member.avatarInitials || member.name.slice(0, 2).toUpperCase()}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-medium text-zinc-200 truncate block text-[11px]">
+                                      {member.name}
+                                    </span>
+                                    {isSelf && (
+                                      <span className="text-[9px] font-mono text-indigo-400">(You)</span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] text-zinc-400 truncate block font-mono">
+                                    {member.email}
                                   </span>
-                                  {isSelf && (
-                                    <span className="text-[9px] font-mono text-indigo-400">(You)</span>
-                                  )}
                                 </div>
-                                <span className="text-[10px] text-zinc-400 truncate block font-mono">
-                                  {member.email}
-                                </span>
                               </div>
+                              <div className="shrink-0 pl-2">{getRoleBadge(member.role)}</div>
                             </div>
-                            <div className="shrink-0 pl-2">{getRoleBadge(member.role)}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-dashed border-white/[0.06] bg-white/[0.01] p-3 text-center space-y-0.5">
+                        <p className="text-xs font-medium text-zinc-300">No members assigned</p>
+                        <p className="text-[11px] text-zinc-500">This workspace hasn&apos;t been staffed yet.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
