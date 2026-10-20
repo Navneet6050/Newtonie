@@ -38,7 +38,7 @@ public class TeamService {
         return user != null && "ADMIN".equalsIgnoreCase(user.getSystemRole());
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<TeamResponse> getTeamsForCurrentUser() {
         User actor = currentUserProvider.getCurrentUser();
         List<Team> teams;
@@ -47,6 +47,10 @@ public class TeamService {
             teams = teamRepository.findAll(Sort.by(Sort.Direction.ASC, "name"));
         } else {
             List<TeamMembership> memberships = teamMembershipRepository.findByUserId(actor.getId());
+            if (memberships.isEmpty()) {
+                provisionPersonalWorkspace(actor);
+                memberships = teamMembershipRepository.findByUserId(actor.getId());
+            }
             teams = memberships.stream()
                     .map(TeamMembership::getTeam)
                     .distinct()
@@ -65,6 +69,64 @@ public class TeamService {
         }
 
         return result;
+    }
+
+    @Transactional
+    public TeamMembership provisionPersonalWorkspace(User user) {
+        if (user == null) {
+            throw new IllegalArgumentException("User cannot be null when provisioning workspace");
+        }
+
+        List<TeamMembership> existing = teamMembershipRepository.findByUserId(user.getId());
+        if (!existing.isEmpty()) {
+            return existing.get(0);
+        }
+
+        String uniqueName = generateUniqueWorkspaceName(user.getName());
+        Team team = new Team(
+                UUID.randomUUID(),
+                uniqueName,
+                "Personal workspace for " + (user.getName() != null ? user.getName().trim() : "Operator")
+        );
+        Team savedTeam = teamRepository.save(team);
+
+        TeamMembership membership = new TeamMembership(
+                UUID.randomUUID(),
+                savedTeam,
+                user,
+                "TEAM_LEAD"
+        );
+        return teamMembershipRepository.save(membership);
+    }
+
+    @Transactional
+    public TeamResponse provisionPersonalWorkspaceForCurrentUser() {
+        User actor = currentUserProvider.getCurrentUser();
+        TeamMembership membership = provisionPersonalWorkspace(actor);
+        return getTeamById(membership.getTeam().getId());
+    }
+
+    private String generateUniqueWorkspaceName(String userName) {
+        String cleanName = (userName != null && !userName.isBlank()) ? userName.trim() : "Personal";
+        if (cleanName.length() > 75) {
+            cleanName = cleanName.substring(0, 75).trim();
+        }
+
+        String baseName = cleanName + "'s Workspace";
+        String candidate = baseName;
+        int counter = 1;
+
+        while (teamRepository.findByName(candidate).isPresent()) {
+            String suffix = " (" + counter + ")";
+            int maxBaseLen = 100 - suffix.length();
+            if (baseName.length() > maxBaseLen) {
+                candidate = baseName.substring(0, maxBaseLen) + suffix;
+            } else {
+                candidate = baseName + suffix;
+            }
+            counter++;
+        }
+        return candidate;
     }
 
     @Transactional(readOnly = true)

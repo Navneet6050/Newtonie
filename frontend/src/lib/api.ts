@@ -462,6 +462,19 @@ export async function fetchTeamDetails(id: string): Promise<BackendTeam> {
   return res.json()
 }
 
+export async function provisionPersonalWorkspace(): Promise<BackendTeam> {
+  const res = await fetch(`${API_BASE}/teams/provision-personal`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to provision personal workspace: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchActivityFeed(
   teamId?: string,
   page = 0,

@@ -106,7 +106,12 @@ public class TeamAndActivityAuthorizationTests {
                         .header("Authorization", adminToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$", hasSize(3)));
+                .andExpect(jsonPath("$", org.hamcrest.Matchers.hasSize(org.hamcrest.Matchers.greaterThanOrEqualTo(3))))
+                .andExpect(jsonPath("$[*].id", org.hamcrest.Matchers.hasItems(
+                        TEAM_ACME_STUDIO_ID.toString(),
+                        TEAM_ACME_PLATFORM_ID.toString(),
+                        TEAM_ACME_CLOUD_INFRA_ID.toString()
+                )));
     }
 
     @Test

@@ -24,6 +24,7 @@ import org.springframework.test.web.servlet.MvcResult;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -37,11 +38,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.newtonite.security.AdminBootstrapRunner;
 import com.newtonite.security.RegistrationRateLimiter;
+import com.newtonite.security.UserRegistrationService;
 import com.newtonite.security.dto.RegisterRequest;
 import com.newtonite.team.TeamMembershipRepository;
 import com.newtonite.team.TeamRepository;
+import com.newtonite.team.TeamService;
 import com.newtonite.team.UserRepository;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -73,6 +78,15 @@ public class SecurityAuthTests {
 
     @Autowired
     private RegistrationRateLimiter registrationRateLimiter;
+
+    @SpyBean
+    private TeamService teamService;
+
+    @Autowired
+    private UserRegistrationService userRegistrationService;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     private static final UUID TEAM_ACME_STUDIO_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final UUID TEAM_ACME_PLATFORM_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
@@ -645,8 +659,11 @@ public class SecurityAuthTests {
     @DisplayName("16. Registration succeeds, normalizes email, hashes password with BCrypt, and issues valid token")
     void testRegistrationSuccess() throws Exception {
         registrationRateLimiter.reset();
-        String uniqueEmail = "reg.test." + UUID.randomUUID() + "@acme.internal";
-        RegisterRequest registerReq = new RegisterRequest("New Operator", uniqueEmail.toUpperCase(), "SecurePass2026!");
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 6);
+        String uniqueEmail = "reg.test." + uniqueSuffix + "@acme.internal";
+        String opName = "New Operator " + uniqueSuffix;
+        String expectedWorkspace = opName + "'s Workspace";
+        RegisterRequest registerReq = new RegisterRequest(opName, uniqueEmail.toUpperCase(), "SecurePass2026!");
 
         MvcResult result = mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -655,11 +672,12 @@ public class SecurityAuthTests {
                 .andExpect(jsonPath("$.token").isString())
                 .andExpect(jsonPath("$.type").value("Bearer"))
                 .andExpect(jsonPath("$.user.email").value(uniqueEmail.toLowerCase()))
-                .andExpect(jsonPath("$.user.name").value("New Operator"))
-                .andExpect(jsonPath("$.user.avatarInitials").value("NO"))
+                .andExpect(jsonPath("$.user.name").value(opName))
                 .andExpect(jsonPath("$.user.systemRole").value("USER"))
                 .andExpect(jsonPath("$.user.teams").isArray())
-                .andExpect(jsonPath("$.user.teams").isEmpty())
+                .andExpect(jsonPath("$.user.teams", hasSize(1)))
+                .andExpect(jsonPath("$.user.teams[0].teamName").value(expectedWorkspace))
+                .andExpect(jsonPath("$.user.teams[0].role").value("TEAM_LEAD"))
                 .andReturn();
 
         String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
@@ -669,6 +687,8 @@ public class SecurityAuthTests {
         User savedUser = userRepository.findByEmail(uniqueEmail.toLowerCase()).orElseThrow();
         assertThat(savedUser.getPasswordHash()).startsWith("$2a$");
         assertThat(passwordEncoder.matches("SecurePass2026!", savedUser.getPasswordHash())).isTrue();
+        assertThat(teamRepository.findByName(expectedWorkspace)).isPresent();
+        assertThat(teamMembershipRepository.findByUserId(savedUser.getId())).hasSize(1);
 
         // Verify newly registered user can subsequently log in with their normalized email and password
         LoginRequest loginReq = new LoginRequest(uniqueEmail.toLowerCase(), "SecurePass2026!");
@@ -724,10 +744,13 @@ public class SecurityAuthTests {
     @DisplayName("19. Registration strictly assigns USER role and ignores injected privileges")
     void testRegistrationIgnoresInjectedAdminPrivileges() throws Exception {
         registrationRateLimiter.reset();
-        String uniqueEmail = "priv.test." + UUID.randomUUID() + "@acme.internal";
+        String uniqueSuffix = UUID.randomUUID().toString().substring(0, 6);
+        String uniqueEmail = "priv.test." + uniqueSuffix + "@acme.internal";
+        String atkName = "Attacker " + uniqueSuffix;
+        String expectedWorkspace = atkName + "'s Workspace";
         String payloadWithInjectedPrivileges = """
             {
-                "name": "Attacker",
+                "name": "%s",
                 "email": "%s",
                 "password": "Password1234!",
                 "systemRole": "ADMIN",
@@ -735,17 +758,20 @@ public class SecurityAuthTests {
                 "admin": true,
                 "teamId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
             }
-            """.formatted(uniqueEmail);
+            """.formatted(atkName, uniqueEmail);
 
         mockMvc.perform(post("/api/auth/register")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(payloadWithInjectedPrivileges))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.user.systemRole").value("USER"))
-                .andExpect(jsonPath("$.user.teams").isEmpty());
+                .andExpect(jsonPath("$.user.teams", hasSize(1)))
+                .andExpect(jsonPath("$.user.teams[0].teamName").value(expectedWorkspace))
+                .andExpect(jsonPath("$.user.teams[0].role").value("TEAM_LEAD"));
 
         User userInDb = userRepository.findByEmail(uniqueEmail).orElseThrow();
         assertThat(userInDb.getSystemRole()).isEqualTo("USER");
+        assertThat(teamMembershipRepository.existsByTeamIdAndUserId(UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"), userInDb.getId())).isFalse();
     }
 
     @Test
@@ -837,5 +863,305 @@ public class SecurityAuthTests {
         runner.run(null);
         User stillSame = userRepository.findByEmail(adminEmail).orElseThrow();
         assertThat(stillSame.getId()).isEqualTo(adminUser.getId());
+    }
+
+    @Test
+    @DisplayName("22. Successful registration creates workspace and membership, allowing user to retrieve team and create work items")
+    void testNewUserCanRetrieveWorkspaceAndCreateWorkItem() throws Exception {
+        registrationRateLimiter.reset();
+        String janeSuffix = UUID.randomUUID().toString().substring(0, 6);
+        String janeName = "Jane Flow " + janeSuffix;
+        String expectedWorkspace = janeName + "'s Workspace";
+        String email = "jane.flow." + janeSuffix + "@acme.internal";
+        RegisterRequest req = new RegisterRequest(janeName, email, "Password123!");
+
+        MvcResult regResult = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.teams", hasSize(1)))
+                .andExpect(jsonPath("$.user.teams[0].teamName").value(expectedWorkspace))
+                .andExpect(jsonPath("$.user.teams[0].role").value("TEAM_LEAD"))
+                .andReturn();
+
+        JsonNode json = objectMapper.readTree(regResult.getResponse().getContentAsString());
+        String token = "Bearer " + json.get("token").asText();
+        UUID teamId = UUID.fromString(json.get("user").get("teams").get(0).get("teamId").asText());
+
+        // 1. Retrieve teams via /api/teams
+        mockMvc.perform(get("/api/teams")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)))
+                .andExpect(jsonPath("$[0].id").value(teamId.toString()))
+                .andExpect(jsonPath("$[0].name").value(expectedWorkspace));
+
+        // 2. Create work item in newly created personal workspace
+        CreateWorkItemRequest itemReq = new CreateWorkItemRequest(
+                "Jane Initial Pipeline Task",
+                "Verify automated workspace creation and item creation flow.",
+                WorkItemType.TASK,
+                WorkItemPriority.HIGH,
+                "Ops",
+                teamId,
+                null,
+                null
+        );
+
+        MvcResult itemResult = mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(itemReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("Jane Initial Pipeline Task"))
+                .andExpect(jsonPath("$.team.id").value(teamId.toString()))
+                .andExpect(jsonPath("$.team.name").value(expectedWorkspace))
+                .andExpect(jsonPath("$.trackingNumber").value(containsString("NEW-")))
+                .andReturn();
+
+        UUID createdItemId = UUID.fromString(objectMapper.readTree(itemResult.getResponse().getContentAsString()).get("id").asText());
+
+        // 3. User lists work items -> Jane's item is present
+        mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content", hasSize(1)))
+                .andExpect(jsonPath("$.content[0].id").value(createdItemId.toString()));
+    }
+
+    @Test
+    @DisplayName("23. Strict data isolation: A new user cannot access another user's workspace, items, comments, or activity logs")
+    void testNewUserCannotAccessAnotherUserWorkspaceOrData() throws Exception {
+        registrationRateLimiter.reset();
+        // Register User A
+        String emailA = "user.a." + UUID.randomUUID() + "@acme.internal";
+        MvcResult regA = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("User A", emailA, "Password123!"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String tokenA = "Bearer " + objectMapper.readTree(regA.getResponse().getContentAsString()).get("token").asText();
+        UUID teamAId = UUID.fromString(objectMapper.readTree(regA.getResponse().getContentAsString()).get("user").get("teams").get(0).get("teamId").asText());
+
+        // Register User B
+        String emailB = "user.b." + UUID.randomUUID() + "@acme.internal";
+        MvcResult regB = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest("User B", emailB, "Password123!"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String tokenB = "Bearer " + objectMapper.readTree(regB.getResponse().getContentAsString()).get("token").asText();
+
+        // User A creates a work item
+        CreateWorkItemRequest itemA = new CreateWorkItemRequest(
+                "Private Data of User A",
+                "Confidential task in User A workspace",
+                WorkItemType.INCIDENT,
+                WorkItemPriority.URGENT,
+                "Security",
+                teamAId,
+                null,
+                null
+        );
+        MvcResult itemAResult = mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", tokenA)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(itemA)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID itemAId = UUID.fromString(objectMapper.readTree(itemAResult.getResponse().getContentAsString()).get("id").asText());
+
+        // User B tries to read User A's item -> 403 Forbidden
+        mockMvc.perform(get("/api/work-items/" + itemAId)
+                        .header("Authorization", tokenB))
+                .andExpect(status().isForbidden());
+
+        // User B tries to update User A's item -> 403 Forbidden
+        UpdateWorkItemRequest updateReq = new UpdateWorkItemRequest();
+        updateReq.setTitle("Hacked Title");
+        mockMvc.perform(patch("/api/work-items/" + itemAId)
+                        .header("Authorization", tokenB)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(updateReq)))
+                .andExpect(status().isForbidden());
+
+        // User B tries to claim User A's item -> 403 Forbidden
+        mockMvc.perform(post("/api/work-items/" + itemAId + "/claim")
+                        .header("Authorization", tokenB))
+                .andExpect(status().isForbidden());
+
+        // User B tries to view comments on User A's item -> 403 Forbidden
+        mockMvc.perform(get("/api/work-items/" + itemAId + "/comments")
+                        .header("Authorization", tokenB))
+                .andExpect(status().isForbidden());
+
+        // User B tries to view activity logs for User A's item -> 403 Forbidden
+        mockMvc.perform(get("/api/work-items/" + itemAId + "/activity")
+                        .header("Authorization", tokenB))
+                .andExpect(status().isForbidden());
+
+        // User B tries to view User A's team by ID -> 403 Forbidden
+        mockMvc.perform(get("/api/teams/" + teamAId)
+                        .header("Authorization", tokenB))
+                .andExpect(status().isForbidden());
+
+        // User B lists work items -> User A's item is NOT included
+        MvcResult listB = mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", tokenB))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode bContent = objectMapper.readTree(listB.getResponse().getContentAsString()).get("content");
+        assertThat(bContent.isEmpty()).isTrue();
+    }
+
+    @Test
+    @DisplayName("24. Duplicate registration does not create extra workspaces")
+    void testDuplicateRegistrationDoesNotCreateExtraWorkspaces() throws Exception {
+        registrationRateLimiter.reset();
+        String dupSuffix = UUID.randomUUID().toString().substring(0, 6);
+        String dupName = "Dup Person " + dupSuffix;
+        String expectedWs = dupName + "'s Workspace";
+        String dupEmail = "dup.test." + dupSuffix + "@acme.internal";
+        RegisterRequest req1 = new RegisterRequest(dupName, dupEmail, "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req1)))
+                .andExpect(status().isCreated());
+
+        // Re-attempt registration with same email
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req1)))
+                .andExpect(status().isConflict());
+
+        // Verify only one workspace was created
+        assertThat(teamRepository.findByName(expectedWs)).isPresent();
+        assertThat(teamRepository.findByName(expectedWs + " (1)")).isEmpty();
+    }
+
+    @Test
+    @DisplayName("25. A provisioning failure rolls back user registration atomically")
+    void testProvisioningFailureRollsBackTransaction() {
+        String rollbackEmail = "rollback.tx." + UUID.randomUUID() + "@acme.internal";
+
+        org.mockito.Mockito.doAnswer(invocation -> {
+            User u = invocation.getArgument(0);
+            if (u.getEmail().startsWith("rollback.tx.")) {
+                throw new RuntimeException("Simulated provisioning crash");
+            }
+            return invocation.callRealMethod();
+        }).when(teamService).provisionPersonalWorkspace(org.mockito.ArgumentMatchers.any());
+
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () -> {
+            userRegistrationService.registerUserWithPersonalWorkspace(
+                    rollbackEmail,
+                    "Rollback User",
+                    "RU",
+                    "Password123!"
+            );
+        });
+
+        // Verify that the user was NOT persisted in the database
+        assertThat(userRepository.findByEmail(rollbackEmail)).isEmpty();
+    }
+
+    @Test
+    @DisplayName("26. Existing admin permissions continue to work across all workspaces")
+    void testAdminAccessAcrossWorkspaces() throws Exception {
+        registrationRateLimiter.reset();
+        // Register a regular user and create an item
+        String adminCheckSuffix = UUID.randomUUID().toString().substring(0, 6);
+        String adminCheckName = "Admin Check User " + adminCheckSuffix;
+        String expectedWs = adminCheckName + "'s Workspace";
+        String email = "admin.check." + adminCheckSuffix + "@acme.internal";
+        MvcResult regResult = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new RegisterRequest(adminCheckName, email, "Password123!"))))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        String userToken = "Bearer " + objectMapper.readTree(regResult.getResponse().getContentAsString()).get("token").asText();
+        UUID teamId = UUID.fromString(objectMapper.readTree(regResult.getResponse().getContentAsString()).get("user").get("teams").get(0).get("teamId").asText());
+
+        CreateWorkItemRequest itemReq = new CreateWorkItemRequest(
+                "Task Visible to Admin",
+                "Created by regular user",
+                WorkItemType.TASK,
+                WorkItemPriority.MEDIUM,
+                "Ops",
+                teamId,
+                null,
+                null
+        );
+        MvcResult itemResult = mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(itemReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID createdItemId = UUID.fromString(objectMapper.readTree(itemResult.getResponse().getContentAsString()).get("id").asText());
+
+        // Admin Alex Morgan accesses the new user's team and work item
+        String adminToken = tokenProvider.alexMorganToken();
+
+        // Admin can read new user's team details
+        mockMvc.perform(get("/api/teams/" + teamId)
+                        .header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(teamId.toString()))
+                .andExpect(jsonPath("$.name").value(expectedWs));
+
+        // Admin can read the new user's work item
+        mockMvc.perform(get("/api/work-items/" + createdItemId)
+                        .header("Authorization", adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(createdItemId.toString()));
+    }
+
+    @Test
+    @DisplayName("27. Existing registered user without team membership is safely recovered on login and /api/auth/me")
+    void testExistingUnassignedUserRecoveryOnLogin() throws Exception {
+        String legacySuffix = UUID.randomUUID().toString().substring(0, 6);
+        String legacyName = "Legacy Unassigned " + legacySuffix;
+        String expectedWs = legacyName + "'s Workspace";
+        String unassignedEmail = "legacy.unassigned." + legacySuffix + "@acme.internal";
+        User legacyUser = new User(
+                UUID.randomUUID(),
+                unassignedEmail,
+                legacyName,
+                "LU",
+                "USER",
+                passwordEncoder.encode("LegacyPass2026!"),
+                true
+        );
+        userRepository.save(legacyUser);
+
+        // Confirm user has 0 team memberships
+        assertThat(teamMembershipRepository.findByUserId(legacyUser.getId())).isEmpty();
+
+        // When legacy user logs in, their personal workspace is automatically provisioned
+        LoginRequest loginReq = new LoginRequest(unassignedEmail, "LegacyPass2026!");
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.teams", hasSize(1)))
+                .andExpect(jsonPath("$.user.teams[0].teamName").value(expectedWs))
+                .andExpect(jsonPath("$.user.teams[0].role").value("TEAM_LEAD"))
+                .andReturn();
+
+        // Verify in DB that workspace was created and membership assigned
+        List<com.newtonite.team.TeamMembership> memberships = teamMembershipRepository.findByUserId(legacyUser.getId());
+        assertThat(memberships).hasSize(1);
+        assertThat(memberships.get(0).getRole()).isEqualTo("TEAM_LEAD");
+        assertThat(memberships.get(0).getTeam().getName()).isEqualTo(expectedWs);
+
+        // Verify user can now immediately retrieve their workspace and create items
+        String token = "Bearer " + objectMapper.readTree(loginResult.getResponse().getContentAsString()).get("token").asText();
+        mockMvc.perform(get("/api/teams")
+                        .header("Authorization", token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(1)));
     }
 }

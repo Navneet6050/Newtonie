@@ -36,6 +36,8 @@ public class AuthController {
     private final JwtService jwtService;
     private final CurrentUserProvider currentUserProvider;
     private final RegistrationRateLimiter registrationRateLimiter;
+    private final UserRegistrationService userRegistrationService;
+    private final com.newtonite.team.TeamService teamService;
 
     public AuthController(
             UserRepository userRepository,
@@ -43,13 +45,17 @@ public class AuthController {
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             CurrentUserProvider currentUserProvider,
-            RegistrationRateLimiter registrationRateLimiter) {
+            RegistrationRateLimiter registrationRateLimiter,
+            UserRegistrationService userRegistrationService,
+            com.newtonite.team.TeamService teamService) {
         this.userRepository = userRepository;
         this.teamMembershipRepository = teamMembershipRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.currentUserProvider = currentUserProvider;
         this.registrationRateLimiter = registrationRateLimiter;
+        this.userRegistrationService = userRegistrationService;
+        this.teamService = teamService;
     }
 
     @PostMapping("/login")
@@ -65,6 +71,11 @@ public class AuthController {
 
         if (!user.isEnabled() || user.getPasswordHash() == null || !passwordEncoder.matches(request.password(), user.getPasswordHash())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid email or password");
+        }
+
+        // Safe recovery for existing registered users who have no team memberships
+        if (!"ADMIN".equalsIgnoreCase(user.getSystemRole())) {
+            teamService.provisionPersonalWorkspace(user);
         }
 
         String token = jwtService.generateToken(user);
@@ -92,20 +103,14 @@ public class AuthController {
         }
 
         String initials = computeInitials(trimmedName);
-        String passwordHash = passwordEncoder.encode(request.password());
 
-        // Strictly assign least-privileged "USER" system role server-side.
-        // Never accept elevated permissions or roles from registration requests.
-        User newUser = new User(
-                UUID.randomUUID(),
+        // Strictly assign least-privileged "USER" system role and atomically provision personal workspace
+        User newUser = userRegistrationService.registerUserWithPersonalWorkspace(
                 cleanEmail,
                 trimmedName,
                 initials,
-                "USER",
-                passwordHash,
-                true
+                request.password()
         );
-        userRepository.save(newUser);
 
         String token = jwtService.generateToken(newUser);
         AuthUserResponse userResponse = toAuthUserResponse(newUser);
@@ -116,6 +121,10 @@ public class AuthController {
     @GetMapping("/me")
     public ResponseEntity<AuthUserResponse> getCurrentUser() {
         User user = currentUserProvider.getCurrentUser();
+        // Safe recovery for active session users who have no team memberships
+        if (!"ADMIN".equalsIgnoreCase(user.getSystemRole())) {
+            teamService.provisionPersonalWorkspace(user);
+        }
         AuthUserResponse response = toAuthUserResponse(user);
         return ResponseEntity.ok(response);
     }

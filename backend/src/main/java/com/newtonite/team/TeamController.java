@@ -31,4 +31,10 @@ public class TeamController {
         TeamResponse team = teamService.getTeamById(id);
         return ResponseEntity.ok(team);
     }
+
+    @org.springframework.web.bind.annotation.PostMapping("/provision-personal")
+    public ResponseEntity<TeamResponse> provisionPersonalWorkspace() {
+        TeamResponse team = teamService.provisionPersonalWorkspaceForCurrentUser();
+        return ResponseEntity.ok(team);
+    }
 }

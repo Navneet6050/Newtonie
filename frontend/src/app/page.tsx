@@ -12,7 +12,6 @@ import {
   Loader2,
   Plus,
   RotateCw,
-  UserCheck,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DashboardShell, useDashboard } from "@/components/dashboard/dashboard-shell"
@@ -144,21 +143,21 @@ function DashboardContent() {
         </div>
       </section>
 
-      {/* Onboarding Notice for Newly Registered Operators without Teams */}
+      {/* Onboarding Notice for Incomplete Workspace Provisioning */}
       {user && user.systemRole !== "ADMIN" && (!user.teams || user.teams.length === 0) && (
         <div
           role="status"
-          className="flex items-start gap-3 rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3.5 sm:p-4 text-xs text-indigo-200 animate-in fade-in duration-200"
+          className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 sm:p-4 text-xs text-amber-200 animate-in fade-in duration-200"
         >
-          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-indigo-400/40 bg-indigo-500/20 text-indigo-300">
-            <UserCheck className="size-4" />
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg border border-amber-400/40 bg-amber-500/20 text-amber-300">
+            <AlertCircle className="size-4" />
           </div>
           <div className="space-y-1 text-left">
             <div className="font-semibold text-white text-xs">
-              Welcome to Newtonite, {user.name}
+              Workspace Provisioning Incomplete
             </div>
-            <p className="text-[11px] text-indigo-200/80 leading-relaxed">
-              Your account has been provisioned with least-privilege operator access. You are currently not assigned to an active team workspace. Contact your workspace administrator (<span className="font-mono text-white/90">admin@newtonie.com</span>) to be assigned to an engineering team to start triaging and creating work items.
+            <p className="text-[11px] text-amber-200/80 leading-relaxed">
+              Your account is active, but your personal workspace has not finished provisioning. Refresh your browser to retry automatic setup, or contact support (<span className="font-mono text-white/90">admin@newtonie.com</span>) if this message persists.
             </p>
           </div>
         </div>
