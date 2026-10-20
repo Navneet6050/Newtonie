@@ -4,8 +4,10 @@ import * as React from "react"
 import {
   AlertCircle,
   ArrowRight,
+  Calendar,
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
@@ -14,11 +16,11 @@ import {
   Loader2,
   Lock,
   MoreHorizontal,
+  Plus,
   RotateCw,
   Search,
   UserCheck,
   X,
-  Plus,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,12 +44,76 @@ import {
   claimWorkItem,
   fetchWorkItems,
 } from "@/lib/api"
-import { CreateItemDialog } from "@/components/work-items/create-item-dialog"
 import { motion } from "motion/react"
 
 let queueIntroPlayed = false
 
-type FilterType = "all" | "high_priority" | "in_progress" | "review_needed" | "blocked"
+export type StatusFilterType = "all" | "high_priority" | "in_progress" | "review_needed" | "blocked"
+export type DateFilterType = "all" | "overdue" | "today" | "next_7_days" | "custom"
+
+export interface CustomDateRange {
+  startDate: string // "YYYY-MM-DD"
+  endDate: string   // "YYYY-MM-DD"
+}
+
+/**
+ * Calculates canonical ISO timestamp boundaries based on the user's local calendar dates.
+ * Avoids off-by-one errors caused by naive UTC conversions.
+ */
+function calculateDueDateRange(
+  filter: DateFilterType,
+  customRange?: CustomDateRange
+): { dueDateFrom?: string; dueDateTo?: string } {
+  if (filter === "all") {
+    return {}
+  }
+
+  const now = new Date()
+  // Local calendar start of today 00:00:00.000 (inclusive lower bound)
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+  // Local calendar start of tomorrow 00:00:00.000 (exclusive upper bound for today)
+  const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0)
+
+  if (filter === "overdue") {
+    // Strictly before start of today: dueDate < startOfToday
+    return { dueDateTo: startOfToday.toISOString() }
+  }
+
+  if (filter === "today") {
+    // Due today: between start of today and start of tomorrow
+    return {
+      dueDateFrom: startOfToday.toISOString(),
+      dueDateTo: startOfTomorrow.toISOString(),
+    }
+  }
+
+  if (filter === "next_7_days") {
+    // 7 calendar days starting today: from start of today to start of (today + 7 days)
+    const endOfNext7DaysExclusive = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 7, 0, 0, 0, 0)
+    return {
+      dueDateFrom: startOfToday.toISOString(),
+      dueDateTo: endOfNext7DaysExclusive.toISOString(),
+    }
+  }
+
+  if (filter === "custom" && customRange?.startDate && customRange?.endDate) {
+    const [sYear, sMonth, sDay] = customRange.startDate.split("-").map(Number)
+    const customStart = new Date(sYear, sMonth - 1, sDay, 0, 0, 0, 0)
+
+    // End date inclusive: up to start of the day after endDate (exclusive upper bound)
+    const [eYear, eMonth, eDay] = customRange.endDate.split("-").map(Number)
+    const customEndExclusive = new Date(eYear, eMonth - 1, eDay + 1, 0, 0, 0, 0)
+
+    if (customStart.getTime() < customEndExclusive.getTime()) {
+      return {
+        dueDateFrom: customStart.toISOString(),
+        dueDateTo: customEndExclusive.toISOString(),
+      }
+    }
+  }
+
+  return {}
+}
 
 export function WorkQueue() {
   const { user, isAuthenticated, setShowLoginModal } = useAuth()
@@ -59,9 +125,17 @@ export function WorkQueue() {
     refreshKey,
     selectedTeamId,
     activeNav,
+    openCreateItem,
   } = useDashboard()
 
-  const [activeFilter, setActiveFilter] = React.useState<FilterType>("all")
+  const [activeFilter, setActiveFilter] = React.useState<StatusFilterType>("all")
+  const [dateFilter, setDateFilter] = React.useState<DateFilterType>("all")
+  const [customRange, setCustomRange] = React.useState<CustomDateRange>({ startDate: "", endDate: "" })
+  const [customRangeDraft, setCustomRangeDraft] = React.useState<CustomDateRange>({ startDate: "", endDate: "" })
+  const [customRangeError, setCustomRangeError] = React.useState<string | null>(null)
+  const [isCustomRangeOpen, setIsCustomRangeOpen] = React.useState(false)
+  const [isDateMenuOpen, setIsDateMenuOpen] = React.useState(false)
+
   const [items, setItems] = React.useState<BackendWorkItem[]>([])
   const [page, setPage] = React.useState(0)
   const [totalPages, setTotalPages] = React.useState(1)
@@ -75,7 +149,6 @@ export function WorkQueue() {
   const [error, setError] = React.useState<string | null>(null)
   const [claimingId, setClaimingId] = React.useState<string | null>(null)
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
-  const [isCreateOpen, setIsCreateOpen] = React.useState(false)
 
   // Debounced search to avoid overwhelming backend on fast typing
   const [debouncedSearch, setDebouncedSearch] = React.useState(searchQuery)
@@ -120,6 +193,7 @@ export function WorkQueue() {
       priorityParam = "URGENT,HIGH"
     }
     const assigneeParam = activeNav === "my_work" && user ? user.id : undefined
+    const { dueDateFrom, dueDateTo } = calculateDueDateRange(dateFilter, customRange)
 
     fetchWorkItems({
       search: debouncedSearch.trim() || undefined,
@@ -127,6 +201,8 @@ export function WorkQueue() {
       priority: priorityParam,
       teamId: selectedTeamId,
       assigneeId: assigneeParam,
+      dueDateFrom,
+      dueDateTo,
       page,
       size: 10,
       sort: "updatedAt,desc",
@@ -142,7 +218,7 @@ export function WorkQueue() {
       .finally(() => {
         setIsLoading(false)
       })
-  }, [isAuthenticated, activeFilter, debouncedSearch, selectedTeamId, activeNav, user, page])
+  }, [isAuthenticated, activeFilter, dateFilter, customRange, debouncedSearch, selectedTeamId, activeNav, user, page])
 
   React.useEffect(() => {
     if (!isAuthenticated) {
@@ -163,6 +239,7 @@ export function WorkQueue() {
       priorityParam = "URGENT,HIGH"
     }
     const assigneeParam = activeNav === "my_work" && user ? user.id : undefined
+    const { dueDateFrom, dueDateTo } = calculateDueDateRange(dateFilter, customRange)
 
     fetchWorkItems({
       search: debouncedSearch.trim() || undefined,
@@ -170,6 +247,8 @@ export function WorkQueue() {
       priority: priorityParam,
       teamId: selectedTeamId,
       assigneeId: assigneeParam,
+      dueDateFrom,
+      dueDateTo,
       page,
       size: 10,
       sort: "updatedAt,desc",
@@ -191,7 +270,7 @@ export function WorkQueue() {
     return () => {
       isMounted = false
     }
-  }, [isAuthenticated, activeFilter, debouncedSearch, selectedTeamId, activeNav, user, page, refreshKey])
+  }, [isAuthenticated, activeFilter, dateFilter, customRange, debouncedSearch, selectedTeamId, activeNav, user, page, refreshKey])
 
   const handleClaim = async (e: React.MouseEvent, item: BackendWorkItem) => {
     e.stopPropagation()
@@ -222,26 +301,26 @@ export function WorkQueue() {
     switch (type) {
       case "INCIDENT":
         return (
-          <span className="rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
+          <span className="rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
             INCIDENT
           </span>
         )
       case "BUG":
         return (
-          <span className="rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
+          <span className="rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
             BUG
           </span>
         )
       case "OPS":
         return (
-          <span className="rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
+          <span className="rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
             OPS
           </span>
         )
       case "TASK":
       default:
         return (
-          <span className="rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
+          <span className="rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide">
             TASK
           </span>
         )
@@ -254,7 +333,7 @@ export function WorkQueue() {
         return (
           <Badge
             variant="outline"
-            className="border-blue-500/30 bg-blue-500/10 text-blue-300 font-normal text-[11px] gap-1"
+            className="border-blue-500/30 bg-blue-500/10 text-blue-300 font-normal text-[11px] gap-1 px-2 py-0.5"
           >
             <Clock className="size-3 text-blue-400" />
             In Progress
@@ -264,7 +343,7 @@ export function WorkQueue() {
         return (
           <Badge
             variant="outline"
-            className="border-amber-500/30 bg-amber-500/10 text-amber-300 font-normal text-[11px] gap-1"
+            className="border-amber-500/30 bg-amber-500/10 text-amber-300 font-normal text-[11px] gap-1 px-2 py-0.5"
           >
             <AlertCircle className="size-3 text-amber-400" />
             Review Needed
@@ -274,7 +353,7 @@ export function WorkQueue() {
         return (
           <Badge
             variant="outline"
-            className="border-zinc-700 bg-zinc-800/40 text-zinc-400 font-normal text-[11px]"
+            className="border-zinc-700 bg-zinc-800/40 text-zinc-400 font-normal text-[11px] px-2 py-0.5"
           >
             Open / To Do
           </Badge>
@@ -283,7 +362,7 @@ export function WorkQueue() {
         return (
           <Badge
             variant="outline"
-            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-normal text-[11px] gap-1"
+            className="border-emerald-500/30 bg-emerald-500/10 text-emerald-300 font-normal text-[11px] gap-1 px-2 py-0.5"
           >
             <CheckCircle2 className="size-3 text-emerald-400" />
             Completed
@@ -293,7 +372,7 @@ export function WorkQueue() {
         return (
           <Badge
             variant="outline"
-            className="border-rose-500/30 bg-rose-500/10 text-rose-300 font-normal text-[11px] gap-1"
+            className="border-rose-500/30 bg-rose-500/10 text-rose-300 font-normal text-[11px] gap-1 px-2 py-0.5"
           >
             <Lock className="size-3 text-rose-400" />
             Blocked
@@ -352,13 +431,71 @@ export function WorkQueue() {
     }
   }
 
-  const formatDueDate = (iso?: string | null) => {
-    if (!iso) return "—"
+  const renderDueDateBadge = (iso?: string | null) => {
+    if (!iso) return null
     try {
-      const d = new Date(iso)
-      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      const dueDate = new Date(iso)
+      if (isNaN(dueDate.getTime())) return null
+
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0)
+      const startOfTomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 0, 0)
+      const formattedDate = dueDate.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+
+      if (dueDate.getTime() < startOfToday.getTime()) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-medium text-rose-400 border border-rose-500/20"
+            title={`Overdue: was due on ${dueDate.toLocaleDateString()}`}
+          >
+            <AlertCircle className="size-2.5 text-rose-400 shrink-0" />
+            <span>Due {formattedDate}</span>
+          </span>
+        )
+      }
+
+      if (dueDate.getTime() < startOfTomorrow.getTime()) {
+        return (
+          <span
+            className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium text-amber-300 border border-amber-500/20"
+            title="Due today"
+          >
+            <Clock className="size-2.5 text-amber-400 shrink-0" />
+            <span>Due Today</span>
+          </span>
+        )
+      }
+
+      return (
+        <span
+          className="inline-flex items-center gap-1 rounded bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-zinc-400 border border-white/[0.06]"
+          title={`Due on ${dueDate.toLocaleDateString()}`}
+        >
+          <Calendar className="size-2.5 text-zinc-500 shrink-0" />
+          <span>Due {formattedDate}</span>
+        </span>
+      )
     } catch {
-      return iso
+      return null
+    }
+  }
+
+  const getDateFilterButtonLabel = () => {
+    switch (dateFilter) {
+      case "overdue":
+        return "Due: Overdue"
+      case "today":
+        return "Due: Today"
+      case "next_7_days":
+        return "Due: Next 7 Days"
+      case "custom":
+        if (customRange.startDate && customRange.endDate) {
+          return `Due: ${customRange.startDate} → ${customRange.endDate}`
+        }
+        return "Due: Custom Range"
+      case "all":
+      default:
+        return "All Dates"
     }
   }
 
@@ -371,7 +508,7 @@ export function WorkQueue() {
         {/* Section Header & View Controls */}
         <div className="flex flex-col gap-2.5 p-3 sm:px-3.5 sm:py-2.5 border-b border-white/[0.06] bg-[#0b0c0f]">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            {/* Title & Filter Tabs */}
+            {/* Title, Status Filter Tabs, & Due Date Filter */}
             <div className="flex items-center gap-2 flex-wrap">
               <div className="flex items-center gap-1.5 mr-2">
                 <h2
@@ -385,7 +522,7 @@ export function WorkQueue() {
                 </span>
               </div>
 
-              {/* Linear-Style View Filter Tabs */}
+              {/* Status / Priority Filter Tabs */}
               <div className="inline-flex items-center rounded-md border border-white/[0.06] bg-black/40 p-0.5 text-[11px] select-none">
                 <button
                   type="button"
@@ -498,6 +635,146 @@ export function WorkQueue() {
                   <span className="relative z-10">Blocked</span>
                 </button>
               </div>
+
+              {/* Compact Due Date Filter Control */}
+              <DropdownMenu open={isDateMenuOpen} onOpenChange={setIsDateMenuOpen}>
+                <div className="inline-flex items-center rounded-md border border-white/[0.07] bg-black/40 text-[11px] overflow-hidden">
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 font-medium transition-colors cursor-pointer select-none",
+                        dateFilter !== "all"
+                          ? "bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25"
+                          : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
+                      )}
+                      aria-label="Filter work items by due date"
+                    >
+                      <Calendar className={cn("size-3", dateFilter !== "all" ? "text-indigo-400" : "text-zinc-500")} />
+                      <span>{getDateFilterButtonLabel()}</span>
+                      <ChevronDown className="size-3 text-zinc-500 ml-0.5 opacity-70" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  {dateFilter !== "all" && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setDateFilter("all")
+                        setCustomRange({ startDate: "", endDate: "" })
+                        setPage(0)
+                      }}
+                      className="px-1.5 py-1 text-zinc-400 hover:text-zinc-100 hover:bg-white/[0.06] transition-colors border-l border-white/[0.06] cursor-pointer"
+                      title="Reset due date filter"
+                      aria-label="Reset due date filter"
+                    >
+                      <X className="size-3" />
+                    </button>
+                  )}
+                </div>
+
+                <DropdownMenuContent
+                  align="start"
+                  className="w-56 border-white/[0.08] bg-[#111215] p-1.5 text-zinc-200 shadow-2xl"
+                >
+                  <DropdownMenuLabel className="text-[10px] font-mono uppercase text-zinc-400 px-2 py-1">
+                    Filter by Due Date
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator className="bg-white/[0.06]" />
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setDateFilter("all")
+                      setCustomRange({ startDate: "", endDate: "" })
+                      setPage(0)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06]",
+                      dateFilter === "all" && "text-indigo-300 font-medium bg-indigo-500/10"
+                    )}
+                  >
+                    <span>All Dates</span>
+                    {dateFilter === "all" && <Check className="size-3 text-indigo-400" />}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setDateFilter("overdue")
+                      setPage(0)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06]",
+                      dateFilter === "overdue" && "text-rose-300 font-medium bg-rose-500/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-rose-400" />
+                      <span>Overdue</span>
+                    </div>
+                    {dateFilter === "overdue" && <Check className="size-3 text-rose-400" />}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setDateFilter("today")
+                      setPage(0)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06]",
+                      dateFilter === "today" && "text-amber-300 font-medium bg-amber-500/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-amber-400" />
+                      <span>Due Today</span>
+                    </div>
+                    {dateFilter === "today" && <Check className="size-3 text-amber-400" />}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setDateFilter("next_7_days")
+                      setPage(0)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06]",
+                      dateFilter === "next_7_days" && "text-indigo-300 font-medium bg-indigo-500/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="size-1.5 rounded-full bg-indigo-400" />
+                      <span>Next 7 Days</span>
+                    </div>
+                    {dateFilter === "next_7_days" && <Check className="size-3 text-indigo-400" />}
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator className="bg-white/[0.06]" />
+
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const todayStr = new Date().toISOString().split("T")[0]
+                      const nextWeekStr = new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0]
+                      setCustomRangeDraft(
+                        customRange.startDate && customRange.endDate
+                          ? customRange
+                          : { startDate: todayStr, endDate: nextWeekStr }
+                      )
+                      setCustomRangeError(null)
+                      setIsCustomRangeOpen(true)
+                    }}
+                    className={cn(
+                      "flex items-center justify-between text-xs cursor-pointer rounded px-2 py-1.5 hover:bg-white/[0.06]",
+                      dateFilter === "custom" && "text-indigo-300 font-medium bg-indigo-500/10"
+                    )}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="size-3 text-zinc-400" />
+                      <span>Custom Range…</span>
+                    </div>
+                    {dateFilter === "custom" && <Check className="size-3 text-indigo-400" />}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
 
             {/* Right: Quick Search & Create */}
@@ -515,8 +792,8 @@ export function WorkQueue() {
                   <button
                     type="button"
                     onClick={() => setSearchQuery("")}
-                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200"
-                    aria-label="Clear filter"
+                    className="absolute right-1.5 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-200 cursor-pointer"
+                    aria-label="Clear filter text"
                   >
                     <X className="size-2.5" />
                   </button>
@@ -525,8 +802,8 @@ export function WorkQueue() {
 
               <Button
                 size="sm"
-                onClick={() => setIsCreateOpen(true)}
-                className="h-7 gap-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-[11px] px-2.5 rounded-md cursor-pointer shadow-xs"
+                onClick={openCreateItem}
+                className="h-7 gap-1 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-[11px] px-2.5 rounded-md cursor-pointer shadow-xs transition-colors"
               >
                 <Plus className="size-3" />
                 <span>New</span>
@@ -559,11 +836,14 @@ export function WorkQueue() {
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="flex items-center justify-between px-3.5 py-2.5 animate-pulse"
+                className="flex items-center justify-between px-3.5 py-3 animate-pulse"
               >
                 <div className="flex items-center gap-3">
                   <div className="h-3.5 w-14 bg-zinc-800 rounded" />
-                  <div className="h-3.5 w-48 sm:w-80 bg-zinc-800 rounded" />
+                  <div className="space-y-1.5">
+                    <div className="h-3.5 w-48 sm:w-80 bg-zinc-800 rounded" />
+                    <div className="h-2.5 w-32 bg-zinc-800/60 rounded" />
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <div className="h-3.5 w-16 bg-zinc-800 rounded hidden sm:block" />
@@ -595,7 +875,7 @@ export function WorkQueue() {
         ) : items.length > 0 ? (
           <div>
             {/* Desktop Column Header */}
-            <div className="hidden sm:grid grid-cols-[88px_1fr_135px_100px_110px_36px] items-center border-b border-white/[0.05] py-2 px-3.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
+            <div className="hidden sm:grid grid-cols-[88px_1fr_135px_96px_110px_32px] items-center border-b border-white/[0.05] py-2 px-3.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
               <span>Issue Key</span>
               <span>Title & Details</span>
               <span>Status</span>
@@ -613,14 +893,14 @@ export function WorkQueue() {
                   initial={queueIntroPlayed ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.28, ease: "easeOut", delay: Math.min(index, 10) * 0.035 }}
-                  className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_100px_110px_36px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none"
+                  className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_96px_110px_32px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none gap-2 sm:gap-0"
                 >
                   {/* Issue Key / Tracking Number */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
                       onClick={(e) => handleCopyId(e, item.trackingNumber)}
-                      className="font-mono text-[11px] font-semibold text-zinc-400 hover:text-indigo-400 transition-colors"
+                      className="font-mono text-[11px] font-semibold text-zinc-400 hover:text-indigo-400 transition-colors cursor-pointer"
                       title="Click to copy tracking number"
                     >
                       {copiedId === item.trackingNumber ? (
@@ -633,20 +913,30 @@ export function WorkQueue() {
                     </button>
                   </div>
 
-                  {/* Title & Metadata Badges */}
-                  <div className="flex items-center gap-2 min-w-0 pr-2 my-1 sm:my-0">
-                    <span className="text-[13px] font-medium text-zinc-200 group-hover:text-white transition-colors truncate">
+                  {/* Refined Title & Secondary Metadata (2-line structure) */}
+                  <div className="min-w-0 pr-3 my-0.5 sm:my-0 w-full sm:w-auto">
+                    {/* Primary Line: Work-item Title */}
+                    <span
+                      title={item.title}
+                      className="text-[13px] font-medium text-zinc-100 group-hover:text-white transition-colors truncate block leading-snug"
+                    >
                       {item.title}
                     </span>
-                    {getTypeBadge(item.type)}
-                    {item.team && (
-                      <span className="hidden md:inline rounded bg-white/[0.03] text-zinc-400 px-1.5 py-0.5 text-[10px] border border-white/[0.05]">
-                        {item.team.name}
+
+                    {/* Secondary Line: Quieter Metadata Group */}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap text-[11px] leading-none">
+                      {getTypeBadge(item.type)}
+                      {item.team && (
+                        <span className="text-zinc-400 font-medium">
+                          {item.team.name}
+                        </span>
+                      )}
+                      <span className="text-zinc-600 text-[10px]">•</span>
+                      <span className="text-zinc-400">
+                        {item.systemArea}
                       </span>
-                    )}
-                    <span className="hidden lg:inline text-[11px] text-zinc-400">
-                      · {item.systemArea} {item.dueDate ? `· Due ${formatDueDate(item.dueDate)}` : ""}
-                    </span>
+                      {renderDueDateBadge(item.dueDate)}
+                    </div>
                   </div>
 
                   {/* Status */}
@@ -665,7 +955,7 @@ export function WorkQueue() {
                               item.assignee.name.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-[11px] text-zinc-300 truncate">
+                        <span className="text-[11px] text-zinc-300 truncate font-medium">
                           {item.assignee.name.split(" ")[0]}
                         </span>
                       </div>
@@ -674,7 +964,7 @@ export function WorkQueue() {
                         type="button"
                         disabled={claimingId === item.id}
                         onClick={(e) => handleClaim(e, item)}
-                        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-white/10 bg-white/[0.04] px-2.5 text-xs font-medium text-white/80 transition hover:bg-white/[0.08] hover:text-white cursor-pointer disabled:opacity-50"
+                        className="inline-flex h-6.5 items-center gap-1 rounded border border-white/10 bg-white/[0.04] px-2 text-[11px] font-medium text-white/80 transition hover:bg-white/[0.08] hover:text-white cursor-pointer disabled:opacity-50"
                       >
                         {claimingId === item.id ? (
                           <Loader2 className="size-3 animate-spin" />
@@ -692,7 +982,7 @@ export function WorkQueue() {
                       <DropdownMenuTrigger asChild>
                         <button
                           type="button"
-                          className="flex size-7 items-center justify-center rounded-md text-white/45 transition hover:bg-white/[0.08] hover:text-white"
+                          className="flex size-7 items-center justify-center rounded-md text-white/45 transition hover:bg-white/[0.08] hover:text-white cursor-pointer"
                           aria-label={`Actions for ${item.trackingNumber}`}
                         >
                           <MoreHorizontal className="size-3.5" />
@@ -748,6 +1038,8 @@ export function WorkQueue() {
             <p className="mt-0.5 text-[11px] text-zinc-400 max-w-sm">
               {searchQuery
                 ? `No items match "${searchQuery}".`
+                : dateFilter !== "all"
+                ? `No items match the selected due date filter (${getDateFilterButtonLabel()}).`
                 : `There are currently no items in this filter view.`}
             </p>
             <Button
@@ -755,12 +1047,14 @@ export function WorkQueue() {
               size="sm"
               onClick={() => {
                 setActiveFilter("all")
+                setDateFilter("all")
+                setCustomRange({ startDate: "", endDate: "" })
                 setSearchQuery("")
                 setPage(0)
               }}
               className="mt-3 border-white/[0.08] bg-zinc-900 text-[11px] text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer h-7"
             >
-              Reset filter
+              Reset all filters
             </Button>
           </div>
         )}
@@ -800,15 +1094,97 @@ export function WorkQueue() {
         )}
       </section>
 
-      {/* Create Dialog */}
-      <CreateItemDialog
-        isOpen={isCreateOpen}
-        onClose={() => setIsCreateOpen(false)}
-        onSuccess={() => {
-          triggerRefresh()
-          loadQueue()
-        }}
-      />
+      {/* Custom Date Range Modal */}
+      {isCustomRangeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-sm rounded-lg border border-white/[0.1] bg-[#121316] p-4 text-zinc-200 shadow-2xl space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-white/[0.06]">
+              <h3 className="text-xs font-semibold text-zinc-100 flex items-center gap-1.5">
+                <Calendar className="size-3.5 text-indigo-400" />
+                <span>Custom Due Date Range</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCustomRangeOpen(false)}
+                className="text-zinc-500 hover:text-zinc-300 cursor-pointer"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <label className="text-[11px] text-zinc-400 block mb-1">
+                  Start Date (From)
+                </label>
+                <input
+                  type="date"
+                  value={customRangeDraft.startDate}
+                  onChange={(e) => {
+                    setCustomRangeDraft((prev) => ({ ...prev, startDate: e.target.value }))
+                    setCustomRangeError(null)
+                  }}
+                  className="w-full h-8 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="text-[11px] text-zinc-400 block mb-1">
+                  End Date (To)
+                </label>
+                <input
+                  type="date"
+                  value={customRangeDraft.endDate}
+                  onChange={(e) => {
+                    setCustomRangeDraft((prev) => ({ ...prev, endDate: e.target.value }))
+                    setCustomRangeError(null)
+                  }}
+                  className="w-full h-8 rounded-md border border-white/[0.08] bg-white/[0.03] px-2.5 text-xs text-zinc-200 focus:border-indigo-500 focus:outline-none"
+                />
+              </div>
+
+              {customRangeError && (
+                <div className="text-[11px] text-rose-400 flex items-center gap-1">
+                  <AlertCircle className="size-3 shrink-0" />
+                  <span>{customRangeError}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2 pt-2 border-t border-white/[0.06]">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setIsCustomRangeOpen(false)}
+                className="h-7 border-white/[0.08] text-xs cursor-pointer"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!customRangeDraft.startDate || !customRangeDraft.endDate) {
+                    setCustomRangeError("Please select both start and end dates.")
+                    return
+                  }
+                  if (customRangeDraft.startDate > customRangeDraft.endDate) {
+                    setCustomRangeError("Start date cannot be after end date.")
+                    return
+                  }
+                  setCustomRange(customRangeDraft)
+                  setDateFilter("custom")
+                  setPage(0)
+                  setIsCustomRangeOpen(false)
+                  setIsDateMenuOpen(false)
+                }}
+                className="h-7 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-3 cursor-pointer shadow-xs"
+              >
+                Apply Range
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

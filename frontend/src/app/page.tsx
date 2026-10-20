@@ -10,8 +10,10 @@ import {
   Clock,
   Layers,
   Loader2,
+  Plus,
   RotateCw,
 } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { DashboardShell, useDashboard } from "@/components/dashboard/dashboard-shell"
 import { MetricCard } from "@/components/dashboard/metric-card"
 import { OpsDistributionGauge } from "@/components/dashboard/ops-distribution-gauge"
@@ -21,7 +23,7 @@ import { type BackendWorkItemMetrics, fetchWorkItemMetrics } from "@/lib/api"
 
 function DashboardContent() {
   const { user, isAuthenticated, isLoading } = useAuth()
-  const { refreshKey, selectedTeamId, currentWorkspace } = useDashboard()
+  const { refreshKey, selectedTeamId, currentWorkspace, openCreateItem } = useDashboard()
   const router = useRouter()
 
   const [metrics, setMetrics] = React.useState<BackendWorkItemMetrics | null>(null)
@@ -72,6 +74,10 @@ function DashboardContent() {
     }
   }, [isAuthenticated, selectedTeamId, refreshKey])
 
+  const formattedToday = React.useMemo(() => {
+    return new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  }, [])
+
   if (isLoading || !isAuthenticated) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-3">
@@ -86,14 +92,14 @@ function DashboardContent() {
   const roleLabel = user?.systemRole === "ADMIN" ? "System Admin" : "Team Operator"
 
   return (
-    <div className="space-y-3">
-      {/* Operational Console Header Bar */}
+    <div className="space-y-3.5">
+      {/* 1. Compact Operational Console Header Bar & Primary Action */}
       <section
         aria-labelledby="dashboard-overview-heading"
-        className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.05] pb-2.5 select-none"
+        className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.05] pb-3 select-none"
       >
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1
               id="dashboard-overview-heading"
               className="text-base sm:text-lg font-semibold tracking-tight text-zinc-100"
@@ -103,8 +109,8 @@ function DashboardContent() {
             <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300 border border-indigo-500/20">
               {roleLabel}
             </span>
-            <span className="text-zinc-500 text-xs hidden sm:inline">•</span>
-            <span className="text-xs text-zinc-400 hidden sm:inline">
+            <span className="text-zinc-600 text-xs hidden sm:inline">•</span>
+            <span className="text-xs text-zinc-400 hidden sm:inline font-medium">
               {currentWorkspace}
             </span>
           </div>
@@ -113,23 +119,31 @@ function DashboardContent() {
           </p>
         </div>
 
-        {/* Live Cluster Status & Telemetry Pill */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
+        {/* Live Cluster Status, Date, & Primary Action */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-300">
             <span className="relative flex size-2" aria-hidden="true">
               <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400/60 [animation-duration:2s] motion-reduce:animate-none" />
               <span className="relative inline-flex size-2 rounded-full bg-emerald-400" />
             </span>
-            <span>OPS CLUSTER ONLINE</span>
+            <span className="font-medium tracking-wide">OPS CLUSTER ONLINE</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400">
+          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-1 text-[10px] text-zinc-400">
             <Calendar className="size-3 text-zinc-500" aria-hidden="true" />
-            <span>Oct 20, 2026</span>
+            <span>{formattedToday}</span>
           </div>
+          <Button
+            size="sm"
+            onClick={openCreateItem}
+            className="h-7 sm:h-7.5 gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-2.5 sm:px-3 rounded-md shadow-xs cursor-pointer shrink-0 transition-colors"
+          >
+            <Plus className="size-3.5" />
+            <span>New Work Item</span>
+          </Button>
         </div>
       </section>
 
-      {/* Metrics Section */}
+      {/* 2. Four Operational Metric Cards */}
       <section aria-labelledby="metrics-heading" className="space-y-2">
         <h2 id="metrics-heading" className="sr-only">
           Workspace Metrics
@@ -138,7 +152,7 @@ function DashboardContent() {
         {metricsError && (
           <div className="flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
             <div className="flex items-center gap-2">
-              <AlertCircle className="size-3.5" />
+              <AlertCircle className="size-3.5 shrink-0" />
               <span>{metricsError}</span>
             </div>
             <button
@@ -157,7 +171,7 @@ function DashboardContent() {
             value={isLoadingMetrics ? "…" : metrics?.openCount ?? 0}
             contextLabel={
               metrics
-                ? `${metrics.urgentCount} urgent · ${metrics.totalCount} total in queue`
+                ? `${metrics.openCount} items awaiting intake`
                 : "Active backlog"
             }
             icon={Layers}
@@ -179,7 +193,7 @@ function DashboardContent() {
             value={isLoadingMetrics ? "…" : metrics?.completedCount ?? 0}
             contextLabel={
               metrics
-                ? `${metrics.completedCount} of ${metrics.totalCount} items completed`
+                ? `${Math.round((metrics.completedCount / Math.max(1, metrics.totalCount)) * 100)}% resolution rate`
                 : "Completed backlog"
             }
             icon={CheckCircle2}
@@ -199,7 +213,7 @@ function DashboardContent() {
         </div>
       </section>
 
-      {/* Operational Distribution Ribbon */}
+      {/* 3. Operational Status Distribution Visualization */}
       {metrics && metrics.totalCount > 0 && (
         <OpsDistributionGauge metrics={metrics} isLoading={isLoadingMetrics} />
       )}

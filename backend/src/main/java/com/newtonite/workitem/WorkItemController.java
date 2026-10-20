@@ -13,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -58,6 +60,8 @@ public class WorkItemController {
             @RequestParam(required = false) UUID teamId,
             @RequestParam(required = false) UUID assigneeId,
             @RequestParam(required = false) String systemArea,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dueDateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant dueDateTo,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(defaultValue = "updatedAt,desc") String sort) {
@@ -69,7 +73,7 @@ public class WorkItemController {
         Pageable pageable = PageRequest.of(boundedPage, boundedSize, sorting);
 
         PagedResponse<WorkItemResponse> response = workItemService.listWorkItems(
-                search, status, priority, type, teamId, assigneeId, systemArea, pageable
+                search, status, priority, type, teamId, assigneeId, systemArea, dueDateFrom, dueDateTo, pageable
         );
         return ResponseEntity.ok(response);
     }

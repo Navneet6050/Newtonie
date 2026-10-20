@@ -253,6 +253,8 @@ export async function fetchWorkItems(params?: {
   teamId?: string
   assigneeId?: string
   systemArea?: string
+  dueDateFrom?: string
+  dueDateTo?: string
   page?: number
   size?: number
   sort?: string
@@ -271,6 +273,8 @@ export async function fetchWorkItems(params?: {
   if (params?.teamId) query.set("teamId", params.teamId)
   if (params?.assigneeId) query.set("assigneeId", params.assigneeId)
   if (params?.systemArea) query.set("systemArea", params.systemArea)
+  if (params?.dueDateFrom) query.set("dueDateFrom", params.dueDateFrom)
+  if (params?.dueDateTo) query.set("dueDateTo", params.dueDateTo)
   if (params?.page !== undefined) query.set("page", String(params.page))
   if (params?.size !== undefined) query.set("size", String(params.size))
   if (params?.sort) query.set("sort", params.sort)

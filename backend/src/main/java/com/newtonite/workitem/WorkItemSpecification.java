@@ -3,6 +3,7 @@ package com.newtonite.workitem;
 import jakarta.persistence.criteria.Predicate;
 import org.springframework.data.jpa.domain.Specification;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -17,7 +18,9 @@ public class WorkItemSpecification {
             UUID teamId,
             List<UUID> allowedTeamIds,
             UUID assigneeId,
-            String systemArea) {
+            String systemArea,
+            Instant dueDateFrom,
+            Instant dueDateTo) {
 
         return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
@@ -64,8 +67,41 @@ public class WorkItemSpecification {
                 predicates.add(cb.equal(cb.lower(root.get("systemArea")), systemArea.trim().toLowerCase()));
             }
 
+            if (dueDateFrom != null || dueDateTo != null) {
+                predicates.add(cb.isNotNull(root.get("dueDate")));
+            }
+            if (dueDateFrom != null) {
+                predicates.add(cb.greaterThanOrEqualTo(root.get("dueDate"), dueDateFrom));
+            }
+            if (dueDateTo != null) {
+                predicates.add(cb.lessThan(root.get("dueDate"), dueDateTo));
+            }
+
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    public static Specification<WorkItem> filterBy(
+            String search,
+            WorkItemStatus status,
+            List<WorkItemPriority> priorities,
+            WorkItemType type,
+            UUID teamId,
+            List<UUID> allowedTeamIds,
+            UUID assigneeId,
+            String systemArea) {
+        return filterBy(
+                search,
+                status,
+                priorities,
+                type,
+                teamId,
+                allowedTeamIds,
+                assigneeId,
+                systemArea,
+                null,
+                null
+        );
     }
 
     public static Specification<WorkItem> filterBy(
@@ -85,7 +121,9 @@ public class WorkItemSpecification {
                 teamId,
                 allowedTeamIds,
                 assigneeId,
-                systemArea
+                systemArea,
+                null,
+                null
         );
     }
 

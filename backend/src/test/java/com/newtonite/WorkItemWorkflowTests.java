@@ -285,4 +285,120 @@ public class WorkItemWorkflowTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content", hasSize(1)));
     }
+
+    @Test
+    @DisplayName("Filter work items by due date range correctly matches boundary conditions")
+    void testDueDateFiltering() throws Exception {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant overdue = now.minus(java.time.Duration.ofDays(3));
+        java.time.Instant inThreeDays = now.plus(java.time.Duration.ofDays(3));
+        java.time.Instant inTwoWeeks = now.plus(java.time.Duration.ofDays(14));
+
+        // 1. Create overdue item
+        CreateWorkItemRequest overdueReq = new CreateWorkItemRequest(
+                "Overdue Patch " + UUID.randomUUID(),
+                "Fix overdue security bug",
+                WorkItemType.BUG,
+                WorkItemPriority.HIGH,
+                "Security",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                overdue
+        );
+        MvcResult overdueRes = mockMvc.perform(post("/api/work-items")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(overdueReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String overdueId = objectMapper.readTree(overdueRes.getResponse().getContentAsString()).get("id").asText();
+
+        // 2. Create item due in 3 days
+        CreateWorkItemRequest upcomingReq = new CreateWorkItemRequest(
+                "Upcoming Deploy " + UUID.randomUUID(),
+                "Deploy release candidate",
+                WorkItemType.OPS,
+                WorkItemPriority.MEDIUM,
+                "Release",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                inThreeDays
+        );
+        MvcResult upcomingRes = mockMvc.perform(post("/api/work-items")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(upcomingReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String upcomingId = objectMapper.readTree(upcomingRes.getResponse().getContentAsString()).get("id").asText();
+
+        // 3. Create item due in two weeks
+        CreateWorkItemRequest farReq = new CreateWorkItemRequest(
+                "Far Future Feature " + UUID.randomUUID(),
+                "Quarterly capacity planning",
+                WorkItemType.TASK,
+                WorkItemPriority.LOW,
+                "Planning",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                inTwoWeeks
+        );
+        MvcResult farRes = mockMvc.perform(post("/api/work-items")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(farReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String farId = objectMapper.readTree(farRes.getResponse().getContentAsString()).get("id").asText();
+
+        // 4. Create item with NO due date
+        CreateWorkItemRequest noDueReq = new CreateWorkItemRequest(
+                "Undated Backlog Item " + UUID.randomUUID(),
+                "General cleanup task",
+                WorkItemType.TASK,
+                WorkItemPriority.LOW,
+                "General",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+        MvcResult noDueRes = mockMvc.perform(post("/api/work-items")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(noDueReq)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String noDueId = objectMapper.readTree(noDueRes.getResponse().getContentAsString()).get("id").asText();
+
+        // Query Overdue: dueDateTo = now - 1 day
+        mockMvc.perform(get("/api/work-items")
+                .param("dueDateTo", now.minus(java.time.Duration.ofDays(1)).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + overdueId + "')]").exists())
+                .andExpect(jsonPath("$.content[?(@.id == '" + upcomingId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + farId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + noDueId + "')]").doesNotExist());
+
+        // Query Upcoming 7 days: dueDateFrom = now, dueDateTo = now + 7 days
+        mockMvc.perform(get("/api/work-items")
+                .param("dueDateFrom", now.minus(java.time.Duration.ofMinutes(5)).toString())
+                .param("dueDateTo", now.plus(java.time.Duration.ofDays(7)).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + upcomingId + "')]").exists())
+                .andExpect(jsonPath("$.content[?(@.id == '" + overdueId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + farId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + noDueId + "')]").doesNotExist());
+
+        // Query Custom Range: from now + 10 days to now + 20 days
+        mockMvc.perform(get("/api/work-items")
+                .param("dueDateFrom", now.plus(java.time.Duration.ofDays(10)).toString())
+                .param("dueDateTo", now.plus(java.time.Duration.ofDays(20)).toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + farId + "')]").exists())
+                .andExpect(jsonPath("$.content[?(@.id == '" + upcomingId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + overdueId + "')]").doesNotExist())
+                .andExpect(jsonPath("$.content[?(@.id == '" + noDueId + "')]").doesNotExist());
+
+        // Query All Dates (no dueDate params): undated item is included
+        mockMvc.perform(get("/api/work-items")
+                .param("search", "Undated Backlog Item"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[?(@.id == '" + noDueId + "')]").exists());
+    }
 }

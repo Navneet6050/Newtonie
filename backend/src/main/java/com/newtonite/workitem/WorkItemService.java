@@ -179,6 +179,8 @@ public class WorkItemService {
             UUID teamId,
             UUID assigneeId,
             String systemArea,
+            Instant dueDateFrom,
+            Instant dueDateTo,
             Pageable pageable) {
 
         User actor = currentUserProvider.getCurrentUser();
@@ -198,11 +200,35 @@ public class WorkItemService {
         }
 
         Specification<WorkItem> spec = WorkItemSpecification.filterBy(
-                search, status, priorities, type, teamId, allowedTeamIds, assigneeId, systemArea
+                search, status, priorities, type, teamId, allowedTeamIds, assigneeId, systemArea, dueDateFrom, dueDateTo
         );
 
         Page<WorkItem> page = workItemRepository.findAll(spec, pageable);
         return PagedResponse.from(page, WorkItemResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<WorkItemResponse> listWorkItems(
+            String search,
+            WorkItemStatus status,
+            List<WorkItemPriority> priorities,
+            WorkItemType type,
+            UUID teamId,
+            UUID assigneeId,
+            String systemArea,
+            Pageable pageable) {
+        return listWorkItems(
+                search,
+                status,
+                priorities,
+                type,
+                teamId,
+                assigneeId,
+                systemArea,
+                null,
+                null,
+                pageable
+        );
     }
 
     @Transactional(readOnly = true)
