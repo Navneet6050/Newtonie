@@ -6,7 +6,7 @@ This document records the five core architectural decisions, concurrency models,
 
 ### Decision 1: Modular Monolith Domain Architecture & Transactional Consistency
 
-- **Context**: Newtonite is an internal operations and command-center platform requiring cohesive coordination across work items, team workspaces, collaboration discussions, and immutable activity auditing.
+- **Context**: Newtonite is an internal operations and command-center platform requiring cohesive coordination across work items, team workspaces, collaboration discussions, and append-only activity auditing.
 - **Decision**: Implemented a modular monolith in Spring Boot 3.5 (Java 25) with strict domain package boundaries (`com.newtonite.workitem`, `com.newtonite.team`, `com.newtonite.activity`, `com.newtonite.config`, and `com.newtonite.common`). Domain mutations and their corresponding audit logs or comment updates participate in shared, atomic database transactions (`@Transactional`).
 - **Trade-offs & Rationale**:
   - Avoided the operational latency, network failures, distributed transaction overhead (2PC/Saga), and eventual consistency drift inherent to microservices.
@@ -37,7 +37,7 @@ This document records the five core architectural decisions, concurrency models,
 - **Trade-offs & Rationale**:
   - **Identical Retries**: Replaying the exact same request within the expiration window returns the cached HTTP response (`201 Created` or `200 OK`) without re-executing domain logic or generating duplicate database rows.
   - **Payload Mismatch Detection**: Reusing an active key with a modified request body is detected via SHA-256 hash disagreement and immediately rejected with `409 Conflict`.
-  - **Operator Isolation**: Partitioning by `user_id` ensures that Operator B replaying Operator A's key cannot read Operator A's cached response, completely preventing cross-user data leakage.
+  - **Operator Isolation**: Partitioning by `user_id` ensures that Operator B replaying Operator A's key cannot read Operator A's cached response, isolating cached replay data per authenticated operator.
 
 ---
 
@@ -45,7 +45,7 @@ This document records the five core architectural decisions, concurrency models,
 
 - **Context**: Newtonite operations require authenticated user sessions and strict tenant isolation between organizational engineering teams (e.g., Acme Studio vs. Acme Platform). Plaintext credentials, spoofable client headers, and cross-team data access are unacceptable.
 - **Decision**: Implemented Spring Security stateless authentication paired with server-enforced team authorization:
-  - **Cryptographic Authentication**: Issues signed HMAC-SHA256 JWT tokens containing `sub` (User UUID), `email`, and `systemRole`. Passwords (`NewtoniteDev2026!`) are verified using BCrypt (10 rounds).
+  - **Cryptographic Authentication**: Issues signed HMAC-SHA256 JWT tokens containing `sub` (User UUID), `email`, and `systemRole`. Stored user password hashes are verified using BCrypt (10 rounds); plaintext passwords are never persisted.
   - **Principal Resolution**: `SecurityCurrentUserProvider` resolves the acting user exclusively from the verified `SecurityContextHolder` principal. Client-supplied headers (`X-User-Id`, etc.) are ignored.
   - **Team Scoping Matrix**:
     - `ADMIN` (`system_role = 'ADMIN'`): Global visibility and mutation privileges across all teams.
@@ -63,4 +63,4 @@ This document records the five core architectural decisions, concurrency models,
   - **Session Persistence Synchronization**: The "Remember session on this device" control directly dictates whether tokens are stored in `localStorage` (persisting across restarts) or `sessionStorage` (ephemeral to the tab). Switching the option cleanly purges stale tokens from the opposite storage.
   - **Honest Disclosures & No Mocked OAuth**: Avoided non-functional external OAuth buttons. Enterprise SSO (SAML 2.0 / OIDC) prerequisites are transparently explained, and unsubstantiated compliance badges (`SOC 2 Type II`, `ISO/IEC 27001`) were replaced with real architectural guarantees (ACID transactions, E-Tag preconditions, append-only audit, server-enforced RBAC).
   - **Persistent Work-Item Comments**: Activated the relational `comments` table via JPA `Comment` entity and custom `CommentRepository` with `JOIN FETCH c.author` to eliminate N+1 queries. Comment author identity is derived strictly from the authenticated principal, validation enforces non-empty content under 5,000 characters, and comments are returned in deterministic chronological order (`createdAt ASC`).
-  - **Lightweight Design System**: Implemented a 4-tier dark command center token system (`.surface-subtle`, `.surface-elevated`, `.surface-overlay`) with CSS 3D perspective meters and tabular numerals (`tabular-nums`), eliminating bulky WebGL/Three.js bundles and ensuring full usability across standard browsers and keyboard navigation.
+  - **Lightweight Design System**: Implemented a 4-tier dark command center token system (`.surface-subtle`, `.surface-elevated`, `.surface-overlay`) with CSS 3D perspective meters and tabular numerals (`tabular-nums`), eliminating bulky WebGL/Three.js bundles and supporting standard keyboard navigation without requiring client WebGL runtime support.

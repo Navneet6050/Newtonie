@@ -264,11 +264,11 @@ Status changes must follow explicit operations transitions:
 
 ### 4. User-Scoped Idempotency
 - In Flyway migration `V3`, `idempotency_records` uses a composite primary key `(user_id, key)`.
-- Cached responses and collision detection are isolated per operator, preventing cross-user data leakage.
+- Cached responses and collision detection are scoped by composite key `(user_id, key)`, ensuring replay requests are isolated to the originating operator.
 
-### 5. Local Development Accounts
-All development accounts use the local development password:
-**`NewtoniteDev2026!`** (hashed with BCrypt in migration `V3`):
+### 5. Local Development Accounts (Development-Only)
+The following pre-seeded test accounts are provided strictly for local environment verification. All local development accounts use the development-only password:
+**`NewtoniteDev2026!`** (hashed with BCrypt in Flyway migration `V3`). *These credentials must never be deployed to staging or production environments.*:
 
 | Name | Email | System Role | Primary Team | Team Role |
 | :--- | :--- | :--- | :--- | :--- |
