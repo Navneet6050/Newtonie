@@ -215,26 +215,26 @@ export function WorkQueue() {
     switch (type) {
       case "INCIDENT":
         return (
-          <span className="rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+          <span className="rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
             INCIDENT
           </span>
         )
       case "BUG":
         return (
-          <span className="rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+          <span className="rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
             BUG
           </span>
         )
       case "OPS":
         return (
-          <span className="rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+          <span className="rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
             OPS
           </span>
         )
       case "TASK":
       default:
         return (
-          <span className="rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.2 text-[9px] font-mono font-semibold uppercase">
+          <span className="rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 px-1.5 py-0.5 text-[10px] font-medium uppercase">
             TASK
           </span>
         )
@@ -299,44 +299,44 @@ export function WorkQueue() {
     switch (priority) {
       case "URGENT":
         return (
-          <div className="flex items-center gap-1 text-[11px] text-rose-400 font-medium" title="Priority: Urgent (P0)">
+          <div className="flex items-center gap-1.5 text-[11px] text-rose-400 font-medium" title="Priority: Urgent (P0)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-rose-500 shrink-0">
               <path fillRule="evenodd" d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM7.25 4.5a.75.75 0 011.5 0v4a.75.75 0 01-1.5 0v-4zm.75 6.75a.875.875 0 100-1.75.875.875 0 000 1.75z" clipRule="evenodd" />
             </svg>
-            <span className="hidden xl:inline">Urgent</span>
+            <span className="font-medium text-rose-400">Urgent</span>
           </div>
         )
       case "HIGH":
         return (
-          <div className="flex items-center gap-1 text-[11px] text-amber-400 font-medium" title="Priority: High (P1)">
+          <div className="flex items-center gap-1.5 text-[11px] text-amber-400 font-medium" title="Priority: High (P1)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-amber-500 shrink-0">
               <rect x="2" y="9" width="3" height="5" rx="0.5" />
               <rect x="6.5" y="6" width="3" height="8" rx="0.5" />
               <rect x="11" y="3" width="3" height="11" rx="0.5" />
             </svg>
-            <span className="hidden xl:inline">High</span>
+            <span className="font-medium text-amber-400">High</span>
           </div>
         )
       case "MEDIUM":
         return (
-          <div className="flex items-center gap-1 text-[11px] text-zinc-300" title="Priority: Medium (P2)">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-300" title="Priority: Medium (P2)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-400 shrink-0">
               <rect x="2" y="9" width="3" height="5" rx="0.5" />
               <rect x="6.5" y="6" width="3" height="8" rx="0.5" />
               <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" opacity="0.2" />
             </svg>
-            <span className="hidden xl:inline">Medium</span>
+            <span className="text-zinc-300">Medium</span>
           </div>
         )
       case "LOW":
         return (
-          <div className="flex items-center gap-1 text-[11px] text-zinc-400" title="Priority: Low (P3)">
+          <div className="flex items-center gap-1.5 text-[11px] text-zinc-400" title="Priority: Low (P3)">
             <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor" className="text-zinc-400 shrink-0">
               <rect x="2" y="9" width="3" height="5" rx="0.5" />
               <rect x="6.5" y="6" width="3" height="8" rx="0.5" fill="currentColor" opacity="0.2" />
               <rect x="11" y="3" width="3" height="11" rx="0.5" fill="currentColor" opacity="0.2" />
             </svg>
-            <span className="hidden xl:inline">Low</span>
+            <span className="text-zinc-400">Low</span>
           </div>
         )
     }
@@ -550,7 +550,7 @@ export function WorkQueue() {
         ) : items.length > 0 ? (
           <div>
             {/* Desktop Column Header */}
-            <div className="hidden sm:grid grid-cols-[80px_1fr_120px_100px_120px_40px] items-center border-b border-white/[0.05] py-1.5 px-3.5 text-[10px] font-mono uppercase tracking-wider text-zinc-500 select-none">
+            <div className="hidden sm:grid grid-cols-[88px_1fr_135px_100px_110px_36px] items-center border-b border-white/[0.05] py-2 px-3.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
               <span>Issue Key</span>
               <span>Title & Details</span>
               <span>Status</span>
@@ -565,7 +565,7 @@ export function WorkQueue() {
                 <div
                   key={item.id}
                   onClick={() => openItemDetails(item.id)}
-                  className="group flex flex-col sm:grid sm:grid-cols-[80px_1fr_120px_100px_120px_40px] items-start sm:items-center py-2 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none"
+                  className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_100px_110px_36px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none"
                 >
                   {/* Issue Key / Tracking Number */}
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -587,16 +587,16 @@ export function WorkQueue() {
 
                   {/* Title & Metadata Badges */}
                   <div className="flex items-center gap-2 min-w-0 pr-2 my-1 sm:my-0">
-                    <span className="text-[12px] font-medium text-zinc-200 group-hover:text-white transition-colors truncate">
+                    <span className="text-[13px] font-medium text-zinc-200 group-hover:text-white transition-colors truncate">
                       {item.title}
                     </span>
                     {getTypeBadge(item.type)}
                     {item.team && (
-                      <span className="hidden md:inline rounded bg-white/[0.03] text-zinc-400 px-1.5 py-0.2 text-[9px] font-mono border border-white/[0.05]">
+                      <span className="hidden md:inline rounded bg-white/[0.03] text-zinc-400 px-1.5 py-0.5 text-[10px] border border-white/[0.05]">
                         {item.team.name}
                       </span>
                     )}
-                    <span className="hidden lg:inline text-[10px] text-zinc-400 font-mono">
+                    <span className="hidden lg:inline text-[11px] text-zinc-400">
                       · {item.systemArea} {item.dueDate ? `· Due ${formatDueDate(item.dueDate)}` : ""}
                     </span>
                   </div>

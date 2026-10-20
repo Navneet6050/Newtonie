@@ -128,141 +128,183 @@ export function CreateItemDialog({
       aria-modal="true"
       aria-labelledby="create-item-title"
     >
-      <div className="relative w-full max-w-xl rounded-xl border border-white/[0.08] bg-[#101115] p-5 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
-        {/* Top Header: Team Context & Close */}
-        <div className="flex items-center justify-between border-b border-white/[0.05] pb-3">
+      <div className="relative w-full max-w-xl rounded-xl border border-white/[0.08] bg-[#0f1014] p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono uppercase text-zinc-400">New Issue in</span>
-            <select
-              value={teamId}
-              onChange={(e) => setUserChosenTeamId(e.target.value)}
-              className="rounded-md border border-white/[0.08] bg-[#16171d] px-2 py-0.5 text-xs text-zinc-200 font-medium focus:border-indigo-500 focus:outline-none cursor-pointer"
-            >
-              {user?.teams && user.teams.length > 0 ? (
-                user.teams.map((t) => (
-                  <option key={t.teamId} value={t.teamId}>
-                    {t.teamName} ({t.role})
-                  </option>
-                ))
-              ) : (
-                <option value="">No team found</option>
-              )}
-            </select>
+            <h2 id="create-item-title" className="text-base font-semibold text-zinc-100">
+              Create Work Item
+            </h2>
+            <span className="rounded bg-indigo-500/10 px-2 py-0.5 text-[10px] font-medium text-indigo-300 border border-indigo-500/20">
+              New Issue
+            </span>
           </div>
 
           <button
             type="button"
             onClick={handleClose}
-            className="rounded p-1 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors"
+            className="rounded p-1 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="size-4" />
           </button>
         </div>
 
-        {/* Error Alert */}
+        {/* Validation / Error Alert */}
         {error && (
-          <div className="mt-3 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+          <div className="mt-3.5 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300 animate-in fade-in duration-150">
             <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="mt-3 space-y-4">
-          {/* Frameless Title Input */}
-          <div>
-            <label htmlFor="item-title" className="sr-only">
-              Issue Title
-            </label>
-            <input
-              id="item-title"
-              required
-              autoFocus
-              minLength={3}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Issue title…"
-              className="w-full bg-transparent border-none text-base font-semibold text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:ring-0 p-0"
-            />
-          </div>
-
-          {/* Frameless Description Textarea */}
-          <div>
-            <label htmlFor="item-description" className="sr-only">
-              Issue Description
-            </label>
-            <textarea
-              id="item-description"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add description or incident details…"
-              className="w-full resize-none bg-transparent border-none text-xs text-zinc-300 placeholder:text-zinc-600 focus:outline-none focus:ring-0 p-0 leading-relaxed"
-            />
-          </div>
-
-          {/* Linear-Style Attribute Selector Chips */}
-          <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-white/[0.05]">
-            {/* Type Chip */}
-            <div className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-[#16171d] px-2 py-1 text-[11px] text-zinc-300">
-              <span className="text-zinc-400 font-mono text-[10px]">Type:</span>
-              <select
-                id="item-type"
-                value={type}
-                onChange={(e) => setType(e.target.value as BackendWorkItemType)}
-                className="bg-transparent text-zinc-200 font-medium focus:outline-none cursor-pointer"
-              >
-                <option value="TASK" className="bg-[#16171d]">Task</option>
-                <option value="INCIDENT" className="bg-[#16171d]">Incident</option>
-                <option value="BUG" className="bg-[#16171d]">Bug</option>
-                <option value="OPS" className="bg-[#16171d]">Ops</option>
-              </select>
-            </div>
-
-            {/* Priority Chip */}
-            <div className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-[#16171d] px-2 py-1 text-[11px] text-zinc-300">
-              <span className="text-zinc-400 font-mono text-[10px]">Priority:</span>
-              <select
-                id="item-priority"
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as BackendWorkItemPriority)}
-                className="bg-transparent text-zinc-200 font-medium focus:outline-none cursor-pointer"
-              >
-                <option value="URGENT" className="bg-[#16171d] text-rose-400">Urgent (P0)</option>
-                <option value="HIGH" className="bg-[#16171d] text-amber-400">High (P1)</option>
-                <option value="MEDIUM" className="bg-[#16171d]">Medium (P2)</option>
-                <option value="LOW" className="bg-[#16171d] text-zinc-400">Low (P3)</option>
-              </select>
-            </div>
-
-            {/* System Area Chip */}
-            <div className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-[#16171d] px-2 py-1 text-[11px] text-zinc-300">
-              <span className="text-zinc-400 font-mono text-[10px]">Area:</span>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4 text-xs">
+          {/* Group 1: Issue Details */}
+          <div className="space-y-3">
+            <div>
+              <label htmlFor="item-title" className="block text-xs font-medium text-zinc-300 mb-1">
+                Title <span className="text-rose-400">*</span>
+              </label>
               <input
-                id="item-system-area"
+                id="item-title"
                 required
-                value={systemArea}
-                onChange={(e) => setSystemArea(e.target.value)}
-                placeholder="Core Engine"
-                className="bg-transparent text-zinc-200 w-24 text-[11px] focus:outline-none"
+                autoFocus
+                disabled={isSubmitting}
+                minLength={3}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g. Ingestion service timeout under sustained queue pressure"
+                className="w-full h-9 rounded-md border border-white/[0.08] bg-white/[0.02] px-3 text-xs text-zinc-100 placeholder:text-zinc-500 transition-colors focus:border-indigo-500/70 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50"
               />
             </div>
 
-            {/* Due Date Chip */}
-            <div className="flex items-center gap-1 rounded-md border border-white/[0.07] bg-[#16171d] px-2 py-1 text-[11px] text-zinc-300">
-              <span className="text-zinc-400 font-mono text-[10px]">Due:</span>
-              <input
-                id="item-due-date"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="bg-transparent text-zinc-200 text-[11px] focus:outline-none cursor-pointer"
+            <div>
+              <label htmlFor="item-description" className="block text-xs font-medium text-zinc-300 mb-1">
+                Description & Incident Context
+              </label>
+              <textarea
+                id="item-description"
+                rows={3}
+                disabled={isSubmitting}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Add reproduction steps, impacted nodes, telemetry signals, or triage context…"
+                className="w-full resize-none rounded-md border border-white/[0.08] bg-white/[0.02] p-2.5 text-xs text-zinc-200 placeholder:text-zinc-500 transition-colors focus:border-indigo-500/70 focus:outline-none focus:ring-1 focus:ring-indigo-500/20 disabled:opacity-50 leading-relaxed"
               />
+            </div>
+          </div>
+
+          {/* Group 2: Classification */}
+          <div className="space-y-1.5 pt-2 border-t border-white/[0.06]">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              Classification
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              {/* Type */}
+              <div className="space-y-1">
+                <label htmlFor="item-type" className="block text-[11px] font-medium text-zinc-400">
+                  Type
+                </label>
+                <select
+                  id="item-type"
+                  disabled={isSubmitting}
+                  value={type}
+                  onChange={(e) => setType(e.target.value as BackendWorkItemType)}
+                  className="w-full h-[34px] rounded-md border border-white/[0.08] bg-[#14151b] px-2.5 text-xs text-zinc-200 focus:border-indigo-500/70 focus:outline-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="TASK">Task</option>
+                  <option value="INCIDENT">Incident</option>
+                  <option value="BUG">Bug</option>
+                  <option value="OPS">Ops</option>
+                </select>
+              </div>
+
+              {/* Priority */}
+              <div className="space-y-1">
+                <label htmlFor="item-priority" className="block text-[11px] font-medium text-zinc-400">
+                  Priority
+                </label>
+                <select
+                  id="item-priority"
+                  disabled={isSubmitting}
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as BackendWorkItemPriority)}
+                  className="w-full h-[34px] rounded-md border border-white/[0.08] bg-[#14151b] px-2.5 text-xs text-zinc-200 focus:border-indigo-500/70 focus:outline-none cursor-pointer disabled:opacity-50"
+                >
+                  <option value="URGENT">Urgent (P0)</option>
+                  <option value="HIGH">High (P1)</option>
+                  <option value="MEDIUM">Medium (P2)</option>
+                  <option value="LOW">Low (P3)</option>
+                </select>
+              </div>
+
+              {/* System Area */}
+              <div className="space-y-1">
+                <label htmlFor="item-system-area" className="block text-[11px] font-medium text-zinc-400">
+                  System Area
+                </label>
+                <input
+                  id="item-system-area"
+                  required
+                  disabled={isSubmitting}
+                  value={systemArea}
+                  onChange={(e) => setSystemArea(e.target.value)}
+                  placeholder="Core Engine"
+                  className="w-full h-[34px] rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/70 focus:outline-none disabled:opacity-50"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Group 3: Scheduling & Team Workspace */}
+          <div className="space-y-1.5 pt-2 border-t border-white/[0.06]">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
+              Workspace & Scheduling
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {/* Assigned Team */}
+              <div className="space-y-1">
+                <label htmlFor="item-team" className="block text-[11px] font-medium text-zinc-400">
+                  Assigned Team Workspace <span className="text-rose-400">*</span>
+                </label>
+                <select
+                  id="item-team"
+                  disabled={isSubmitting}
+                  value={teamId}
+                  onChange={(e) => setUserChosenTeamId(e.target.value)}
+                  className="w-full h-[34px] rounded-md border border-white/[0.08] bg-[#14151b] px-2.5 text-xs text-zinc-200 focus:border-indigo-500/70 focus:outline-none cursor-pointer disabled:opacity-50"
+                >
+                  {user?.teams && user.teams.length > 0 ? (
+                    user.teams.map((t) => (
+                      <option key={t.teamId} value={t.teamId}>
+                        {t.teamName} ({t.role})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="">No team found</option>
+                  )}
+                </select>
+              </div>
+
+              {/* Target Due Date */}
+              <div className="space-y-1">
+                <label htmlFor="item-due-date" className="block text-[11px] font-medium text-zinc-400">
+                  Target Due Date
+                </label>
+                <input
+                  id="item-due-date"
+                  type="date"
+                  disabled={isSubmitting}
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full h-[34px] rounded-md border border-white/[0.08] bg-white/[0.02] px-2.5 text-xs text-zinc-200 focus:border-indigo-500/70 focus:outline-none cursor-pointer disabled:opacity-50"
+                />
+              </div>
             </div>
           </div>
 
           {/* Footer Bar */}
-          <div className="pt-3 border-t border-white/[0.05] flex items-center justify-between">
+          <div className="pt-3 border-t border-white/[0.06] flex items-center justify-between">
             <span className="text-[10px] font-mono text-zinc-400 truncate max-w-[200px]" title={`Idempotency Key: ${idempotencyKey}`}>
               Idempotency: {idempotencyKey.slice(0, 8)}…
             </span>
@@ -272,8 +314,9 @@ export function CreateItemDialog({
                 type="button"
                 variant="ghost"
                 size="sm"
+                disabled={isSubmitting}
                 onClick={handleClose}
-                className="text-xs text-zinc-400 hover:text-zinc-200 h-7 px-2.5"
+                className="text-xs text-zinc-400 hover:text-zinc-200 h-8 px-3 cursor-pointer"
               >
                 Cancel
               </Button>
@@ -281,7 +324,7 @@ export function CreateItemDialog({
                 type="submit"
                 disabled={isSubmitting}
                 size="sm"
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3 h-7 gap-1.5 cursor-pointer shadow-xs"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs px-3.5 h-8 gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
               >
                 {isSubmitting ? (
                   <>

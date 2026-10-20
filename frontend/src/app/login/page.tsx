@@ -26,42 +26,42 @@ export default function LoginPage() {
       />
 
       {/* Top Header Bar */}
-      <div className="relative z-10 flex items-center justify-between max-w-5xl w-full mx-auto">
+      <div className="relative z-10 flex items-center justify-between max-w-4xl w-full mx-auto">
         <div className="flex items-center gap-2.5">
-          <div className="flex size-6.5 shrink-0 items-center justify-center rounded bg-gradient-to-br from-indigo-500/30 to-violet-600/30 border border-indigo-500/40 text-indigo-300">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-500/30 to-violet-600/30 border border-indigo-500/40 text-indigo-300">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 2L2 7L12 12L22 7L12 2Z" />
               <path d="M2 17L12 22L22 17" />
               <path d="M2 12L12 17L22 12" />
             </svg>
           </div>
-          <span className="text-[13px] font-semibold tracking-tight text-zinc-100">
+          <span className="text-sm font-semibold tracking-tight text-zinc-100">
             Newtonite
           </span>
-          <span className="rounded bg-white/[0.06] px-1.5 py-0.2 text-[9px] font-mono font-medium text-zinc-400 border border-white/[0.06]">
-            OPS
+          <span className="rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-medium text-zinc-400 border border-white/[0.06]">
+            Operations Console
           </span>
         </div>
 
-        <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400">
+        <div className="flex items-center gap-2 text-xs text-zinc-400">
           <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          <span className="text-zinc-400">System Ready</span>
+          <span>System Online</span>
         </div>
       </div>
 
       {/* Center Auth Card Form */}
-      <div className="relative z-10 my-auto flex flex-col items-center justify-center py-8">
+      <div className="relative z-10 my-auto flex flex-col items-center justify-center py-6">
         <AuthCard onSuccess={() => router.replace("/")} isModal={false} />
       </div>
 
       {/* Bottom Technical Specifications Footer */}
-      <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-5xl w-full mx-auto border-t border-white/[0.05] pt-4 text-[11px] text-zinc-400 font-mono">
+      <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-2 max-w-4xl w-full mx-auto border-t border-white/[0.05] pt-4 text-xs text-zinc-500">
         <div className="flex items-center gap-2">
-          <Shield className="size-3 text-indigo-400" />
-          <span>Server-Enforced Team Isolation · RFC 7232 Optimistic Concurrency</span>
+          <Shield className="size-3.5 text-indigo-400 shrink-0" />
+          <span>Server-Enforced Team Isolation · <span className="font-mono text-zinc-400">RFC 7232</span> Concurrency</span>
         </div>
-        <div className="flex items-center gap-2 text-zinc-400">
-          <Terminal className="size-3" />
+        <div className="flex items-center gap-2 text-zinc-500">
+          <Terminal className="size-3.5 shrink-0" />
           <span>Spring Boot 3.5 · PostgreSQL 16 · Next.js 16</span>
         </div>
       </div>

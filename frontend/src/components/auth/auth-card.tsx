@@ -22,7 +22,6 @@ interface SeedUser {
   email: string
   role: string
   team: string
-  shortLabel: string
 }
 
 const SEED_USERS: SeedUser[] = [
@@ -31,21 +30,18 @@ const SEED_USERS: SeedUser[] = [
     email: "alex.morgan@acme.internal",
     role: "Admin",
     team: "All Workspaces",
-    shortLabel: "Alex (Admin)",
   },
   {
     name: "Sarah Chen",
     email: "sarah.chen@acme.internal",
     role: "Studio",
     team: "Acme Studio",
-    shortLabel: "Sarah (Studio)",
   },
   {
     name: "Liam Vance",
     email: "liam.vance@acme.internal",
     role: "Platform",
     team: "Acme Platform",
-    shortLabel: "Liam (Platform)",
   },
 ]
 
@@ -100,7 +96,7 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
   return (
     <div
       className={cn(
-        "w-full max-w-[380px] transition-all",
+        "w-full max-w-[410px] transition-all",
         isModal
           ? "p-1"
           : "rounded-xl border border-white/[0.08] bg-[#0d0e12] p-6 shadow-2xl"
@@ -113,11 +109,11 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
             <div className="flex size-6 items-center justify-center rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
               <Lock className="size-3" />
             </div>
-            <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-zinc-400">
               Operations Access
             </span>
           </div>
-          <span className="flex items-center gap-1 rounded border border-white/[0.06] bg-white/[0.02] px-1.5 py-0.5 text-[9px] font-mono text-zinc-400">
+          <span className="flex items-center gap-1.5 rounded border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
             Local Node
           </span>
@@ -126,21 +122,21 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
         <h1 className="text-lg font-semibold tracking-tight text-zinc-100 pt-1">
           Sign In to Newtonite
         </h1>
-        <p className="text-[11px] text-zinc-400 leading-normal">
+        <p className="text-xs text-zinc-400 leading-normal">
           Authenticate to access authorized team queue and triage.
         </p>
       </div>
 
       {/* Developer Quick-Fill Profiles */}
-      <div className="mt-3.5 rounded-lg border border-white/[0.06] bg-white/[0.02] p-2">
-        <div className="flex items-center justify-between mb-1.5">
-          <span className="flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider text-amber-400/90 font-medium">
-            <ShieldAlert className="size-2.5 text-amber-400" />
-            <span>Dev-Only Test Profiles</span>
+      <div className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/[0.03] p-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="flex items-center gap-1.5 text-[11px] font-medium text-amber-300">
+            <ShieldAlert className="size-3 text-amber-400 shrink-0" />
+            <span>Development Test Accounts</span>
           </span>
-          <span className="text-[9px] font-mono text-zinc-400">Quick Fill</span>
+          <span className="text-[10px] text-zinc-500">Click to fill</span>
         </div>
-        <div className="grid grid-cols-3 gap-1">
+        <div className="space-y-1.5">
           {SEED_USERS.map((seed) => {
             const isSelected = activeSeedEmail === seed.email && email === seed.email
             return (
@@ -149,15 +145,18 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
                 type="button"
                 onClick={() => handleSelectSeed(seed)}
                 className={cn(
-                  "flex items-center justify-center gap-1 rounded border px-1.5 py-1 text-[10px] font-mono transition-all cursor-pointer",
+                  "w-full flex items-center justify-between rounded-md border px-2.5 py-1.5 text-xs transition-colors cursor-pointer text-left",
                   isSelected
-                    ? "border-indigo-400/50 bg-indigo-500/20 text-indigo-200"
-                    : "border-white/[0.06] bg-black/30 text-zinc-400 hover:border-white/[0.12] hover:text-zinc-200"
+                    ? "border-indigo-500/60 bg-indigo-500/20 text-indigo-100"
+                    : "border-white/[0.06] bg-black/40 text-zinc-300 hover:border-white/[0.14] hover:bg-white/[0.04] hover:text-white"
                 )}
-                title={`${seed.name} (${seed.role}) · ${seed.team}`}
               >
-                <UserCheck className="size-2.5 shrink-0" />
-                <span className="truncate">{seed.shortLabel}</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <UserCheck className={cn("size-3.5 shrink-0", isSelected ? "text-indigo-400" : "text-zinc-500")} />
+                  <span className="font-medium text-zinc-200">{seed.name}</span>
+                  <span className="text-[11px] text-zinc-400">· {seed.role}</span>
+                </div>
+                <span className="text-[11px] text-zinc-500 shrink-0 ml-2">{seed.team}</span>
               </button>
             )
           })}
@@ -268,8 +267,8 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
       </form>
 
       {/* Honest SSO Notice */}
-      <div className="mt-3.5 pt-3 border-t border-white/[0.05] text-[10px] text-zinc-400 font-mono leading-tight">
-        Enterprise SSO (SAML 2.0 / OIDC) unconfigured in local sandbox.
+      <div className="mt-4 pt-3 border-t border-white/[0.05] text-[11px] text-zinc-500 leading-normal">
+        Enterprise SSO (SAML 2.0 / OIDC) is unconfigured in this local environment.
       </div>
     </div>
   )

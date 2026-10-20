@@ -50,10 +50,10 @@ export function MetricCard({
       </div>
 
       <div className="mt-2 flex items-baseline justify-between gap-2">
-        <span className="text-xl font-bold tracking-tight text-zinc-100 font-mono tabular-nums">
+        <span className="text-xl font-bold tracking-tight text-zinc-100 tabular-nums">
           {value}
         </span>
-        <span className="text-[10px] font-mono text-zinc-400 truncate">
+        <span className="text-[11px] text-zinc-400 truncate">
           {contextLabel}
         </span>
       </div>

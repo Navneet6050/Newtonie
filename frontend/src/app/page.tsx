@@ -100,26 +100,26 @@ function DashboardContent() {
             >
               Operations Command
             </h1>
-            <span className="rounded bg-indigo-500/10 px-1.5 py-0.2 text-[10px] font-mono font-medium text-indigo-300 border border-indigo-500/20">
+            <span className="rounded bg-indigo-500/10 px-1.5 py-0.5 text-[10px] font-medium text-indigo-300 border border-indigo-500/20">
               {roleLabel}
             </span>
             <span className="text-zinc-500 text-xs hidden sm:inline">•</span>
-            <span className="text-xs text-zinc-400 font-mono hidden sm:inline">
+            <span className="text-xs text-zinc-400 hidden sm:inline">
               {currentWorkspace}
             </span>
           </div>
-          <p className="text-[11px] text-zinc-400">
+          <p className="text-xs text-zinc-400">
             Real-time operations queue and incident orchestration.
           </p>
         </div>
 
         {/* Live Cluster Status & Telemetry Pill */}
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300 font-mono">
+          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2 py-0.5 text-[10px] text-emerald-300">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" aria-hidden="true" />
             <span>OPS CLUSTER ONLINE</span>
           </div>
-          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400 font-mono">
+          <div className="flex items-center gap-1.5 rounded-md border border-white/[0.06] bg-white/[0.02] px-2 py-0.5 text-[10px] text-zinc-400">
             <Calendar className="size-3 text-zinc-500" aria-hidden="true" />
             <span>Oct 20, 2026</span>
           </div>
@@ -165,7 +165,7 @@ function DashboardContent() {
             value={isLoadingMetrics ? "…" : metrics?.inProgressCount ?? 0}
             contextLabel={
               metrics
-                ? `${metrics.reviewNeededCount} awaiting peer review`
+                ? `${metrics.reviewNeededCount} awaiting review`
                 : "Active sprint items"
             }
             icon={Clock}
@@ -175,9 +175,9 @@ function DashboardContent() {
             title="Completed"
             value={isLoadingMetrics ? "…" : metrics?.completedCount ?? 0}
             contextLabel={
-              metrics && metrics.totalCount > 0
-                ? `${Math.round((metrics.completedCount / metrics.totalCount) * 100)}% resolution rate`
-                : "0 completed items"
+              metrics
+                ? `${metrics.completedCount} of ${metrics.totalCount} items completed`
+                : "Completed backlog"
             }
             icon={CheckCircle2}
             statusVariant="success"
@@ -187,7 +187,7 @@ function DashboardContent() {
             value={isLoadingMetrics ? "…" : metrics?.blockedOrUrgentCount ?? 0}
             contextLabel={
               metrics
-                ? `${metrics.blockedCount} blocked · ${metrics.urgentCount} urgent priority`
+                ? `${metrics.blockedCount} blocked · ${metrics.urgentCount} urgent`
                 : "Immediate attention queue"
             }
             icon={AlertTriangle}
