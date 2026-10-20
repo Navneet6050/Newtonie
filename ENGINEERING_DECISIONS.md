@@ -1,88 +1,66 @@
 # Newtonite Architecture & Engineering Decisions
 
-This document records the foundational architectural decisions, trade-offs, and design patterns established in Newtonite.
+This document records the five core architectural decisions, concurrency models, security controls, and trade-offs governing Newtonite.
 
 ---
 
-### Decision 1: Modular Monolith Domain Architecture
+### Decision 1: Modular Monolith Domain Architecture & Transactional Consistency
 
-- **Context**: Newtonite requires cohesive domain management (work items, team workspaces, activity audits) for an operations control center.
-- **Decision**: Implemented a modular monolith in Spring Boot 3.5 with clean package boundaries (`com.newtonite.workitem`, `com.newtonite.team`, `com.newtonite.activity`, `com.newtonite.config`, and `com.newtonite.common`).
-- **Trade-offs & Rationale**: Avoids operational complexity, distributed transaction overhead, and eventual consistency delays of microservices. Domain modules interact through well-defined service interfaces and participate in shared database transactions when audit logs and entities mutate together.
-
----
-
-### Decision 2: Database-Level Atomic Claiming
-
-- **Context**: Multiple operators may simultaneously attempt to claim an unassigned work item from the queue.
-- **Decision**: Implemented atomic claiming using a conditional SQL update:
-  ```sql
-  UPDATE work_items 
-  SET assignee_id = :userId, updated_at = :now, version = version + 1 
-  WHERE id = :id AND assignee_id IS NULL;
-  ```
-- **Trade-offs & Rationale**: Never relies on a preliminary read followed by an unconditional write. PostgreSQL acquires an exclusive row-level lock during the statement evaluation; exactly one transaction updates the row (`affectedRows == 1`), while any concurrent contender finds `assignee_id IS NOT NULL` and affects 0 rows, triggering an immediate `409 Conflict`.
-
----
-
-### Decision 3: Dual-Layer Optimistic Concurrency Control
-
-- **Context**: Distributed operators reading dashboard queues concurrently must not silently overwrite each other's updates.
-- **Decision**: Combined explicit client version preconditions (`expectedVersion` in request body or `If-Match` HTTP header) with JPA `@Version` optimistic locking.
-- **Trade-offs & Rationale**: Optimistic locking maximizes throughput by avoiding persistent row-locking. If a client attempts an update with a stale version, the application rejects it with `409 Conflict`, preserves the winning update, and suppresses erroneous audit history entries.
-
----
-
-### Decision 4: Transactional Idempotency via SHA-256 Request Hashing
-
-- **Context**: Network hiccups or client retries during work item creation could produce duplicate items and confusing audit logs.
-- **Decision**: Backed the `Idempotency-Key` header with an `idempotency_records` table storing a SHA-256 hash of the request body, response status, and serialized response.
-- **Trade-offs & Rationale**: Replaying the exact same request returns the cached `201 Created` response with zero duplicate database rows or audit events. Attempting to reuse an existing idempotency key with a differing payload is detected and rejected with `409 Conflict`.
-
----
-
-### Decision 5: Explicit Development Identity Isolation (`CurrentUserProvider`)
-
-- **Context**: Real JWT/OAuth2 authentication and authorization were scheduled for Milestone M3. In M2, the server still needed to associate created items, claims, and activity logs with an actor.
-- **Decision**: Created a `CurrentUserProvider` abstraction with a development-only implementation (`DevelopmentCurrentUserProvider`) that resolved to seeded development administrator Alex Morgan (`11111111-1111-1111-1111-111111111111`).
-- **Trade-offs & Rationale**: Strictly avoided trusting arbitrary, spoofable client headers (such as `X-User-Id`). It created a clear security boundary: the controller and service layer always obtain identity from the provider, allowing seamless drop-in replacement with Spring Security principal resolution in M3 without modifying business logic.
-
----
-
-### Decision 6: Stateless JWT Authentication & BCrypt Password Verification (M3)
-
-- **Context**: Newtonite operations require authenticated user sessions where the identity of the caller is verified against securely stored account data. Plaintext passwords or spoofable identity headers are strictly unacceptable.
-- **Decision**: Implemented Spring Security filter chain with signed HMAC-SHA256 JWT access tokens (`io.jsonwebtoken:jjwt:0.12.6`) and `BCryptPasswordEncoder` (10 rounds). Tokens store `sub` (User UUID), `email`, and `systemRole`, signed by a configurable `JWT_SECRET`.
+- **Context**: Newtonite is an internal operations and command-center platform requiring cohesive coordination across work items, team workspaces, collaboration discussions, and immutable activity auditing.
+- **Decision**: Implemented a modular monolith in Spring Boot 3.5 (Java 25) with strict domain package boundaries (`com.newtonite.workitem`, `com.newtonite.team`, `com.newtonite.activity`, `com.newtonite.config`, and `com.newtonite.common`). Domain mutations and their corresponding audit logs or comment updates participate in shared, atomic database transactions (`@Transactional`).
 - **Trade-offs & Rationale**:
-  - Stateless tokens eliminate server-side session affinity requirements and database session tables while providing sub-millisecond cryptographic verification on protected routes.
-  - Development passwords (`NewtoniteDev2026!`) are stored exclusively as BCrypt hashes in Flyway migration V3.
-  - Client identity headers (`X-User-Id`, etc.) are ignored. `SecurityCurrentUserProvider` resolves the acting user exclusively from the verified `SecurityContextHolder` principal.
+  - Avoided the operational latency, network failures, distributed transaction overhead (2PC/Saga), and eventual consistency drift inherent to microservices.
+  - Domain modules communicate via explicit Java service contracts.
+  - Relational integrity is enforced at the database level using PostgreSQL 16 foreign keys (`ON DELETE CASCADE` on child logs and comments) and Flyway versioned migrations.
 
 ---
 
-### Decision 7: Multi-Tenant Team-Scoped Authorization Matrix (M3)
+### Decision 2: Concurrency Control: Atomic Claiming & Dual-Layer Optimistic Locking
 
-- **Context**: Operators from Team A must not be able to read, update, claim, or audit work items belonging to Team B unless their system role explicitly grants cross-team privileges (`ADMIN`).
-- **Decision**: Enforced team-scoped permissions directly within `WorkItemService` and JPA Specifications using `team_memberships`:
-  - **ADMIN** (`system_role = 'ADMIN'`): Global access across all teams.
-  - **MEMBER / TEAM_LEAD**: Strictly restricted to teams they belong to (`teamMembershipRepository.existsByTeamIdAndUserId`).
-  - **Cross-Team Assignment Prevention**: A work item cannot be assigned to any user who is not a member of the item's team (returns `400 Bad Request`).
-  - **Team Filter Scoping**: Querying `GET /api/work-items?teamId=...` for a team the user does not belong to is rejected with `403 Forbidden`. If no team filter is supplied, queries are automatically scoped to `team_id IN (userTeamIds)`.
-  - **Activity Log Inheritance**: Audit logs can only be read if the caller has team access to the parent work item (`403 Forbidden` otherwise).
-
----
-
-### Decision 8: User-Scoped Idempotency Records & Conflict Isolation (M3)
-
-- **Context**: In M2, idempotency records were keyed solely by the client-provided key. A key collision or malicious key replay between two different operators could leak cached responses across user boundaries.
-- **Decision**: Migrated `idempotency_records` in Flyway V3 to use a composite primary key `(user_id, key)`.
-- **Trade-offs & Rationale**: Guarantees that idempotency cache hits and conflict checks are isolated per user. Operator B replaying Operator A's key does not receive Operator A's cached response; each operator owns their own idempotency namespace.
+- **Context**: Multiple operations engineers triage the live work queue concurrently. The system must prevent race conditions during item claiming and avoid lost updates when multiple operators edit item details simultaneously.
+- **Decision**: Implemented a two-tier concurrency control model:
+  1. **Database-Level Atomic Claiming**: Claiming bypasses check-then-act logic and executes as an atomic conditional SQL update:
+     ```sql
+     UPDATE work_items 
+     SET assignee_id = :userId, updated_at = :now, version = version + 1 
+     WHERE id = :id AND assignee_id IS NULL;
+     ```
+     PostgreSQL evaluates this with an exclusive row lock; exactly one transaction modifies the row (`affectedRows == 1`), while concurrent contenders find `assignee_id IS NOT NULL`, affecting 0 rows and triggering an immediate `409 Conflict`.
+  2. **Dual-Layer Optimistic Concurrency Control**: Modifying operations enforce version checks via HTTP `If-Match` entity tags (RFC 7232 strong numeric ETags or wildcard `*`) and JPA `@Version` column checks. Weak ETags (`W/"..."`) are explicitly rejected for state-modifying conditional updates. Stale versions reject with `409 Conflict`, preserving existing data and preventing misleading audit entries.
 
 ---
 
-### Decision 9: Authorization Disclosure Policy: 403 Forbidden vs. 404 Not Found
+### Decision 3: Transactional User-Scoped Idempotency Pipeline
 
-- **Context**: Deciding whether to hide resource existence (404) or report authorization denial (403) when an operator accesses a work item outside their team.
-- **Decision**: Newtonite returns `403 Forbidden` with a structured `ApiError` when an authenticated operator attempts an unauthorized action against an existing resource belonging to another team, and returns `404 Not Found` only when the resource ID does not exist in the database.
-- **Trade-offs & Rationale**: For internal engineering operations platforms, clear distinction between broken UUID links (404) and organizational permission boundaries (403) prevents developer confusion and simplifies incident triaging. Resource existence leakage is acceptable within an internal enterprise tenant compared to public consumer applications.
+- **Context**: Unreliable networks or automated retries during work-item mutations can trigger duplicate items and cluttered audit trails. Furthermore, multi-operator environments risk cache poisoning if idempotency keys are shared or replayed across accounts.
+- **Decision**: Backed the `Idempotency-Key` HTTP header with an `idempotency_records` table storing the request endpoint, a SHA-256 hash of the payload, HTTP response status, and serialized response body. In Flyway V3, the primary key was migrated to a composite key: `(user_id, key)`.
+- **Trade-offs & Rationale**:
+  - **Identical Retries**: Replaying the exact same request within the expiration window returns the cached HTTP response (`201 Created` or `200 OK`) without re-executing domain logic or generating duplicate database rows.
+  - **Payload Mismatch Detection**: Reusing an active key with a modified request body is detected via SHA-256 hash disagreement and immediately rejected with `409 Conflict`.
+  - **Operator Isolation**: Partitioning by `user_id` ensures that Operator B replaying Operator A's key cannot read Operator A's cached response, completely preventing cross-user data leakage.
 
+---
+
+### Decision 4: Stateless JWT Authentication & Multi-Tenant Team Authorization Matrix
+
+- **Context**: Newtonite operations require authenticated user sessions and strict tenant isolation between organizational engineering teams (e.g., Acme Studio vs. Acme Platform). Plaintext credentials, spoofable client headers, and cross-team data access are unacceptable.
+- **Decision**: Implemented Spring Security stateless authentication paired with server-enforced team authorization:
+  - **Cryptographic Authentication**: Issues signed HMAC-SHA256 JWT tokens containing `sub` (User UUID), `email`, and `systemRole`. Passwords (`NewtoniteDev2026!`) are verified using BCrypt (10 rounds).
+  - **Principal Resolution**: `SecurityCurrentUserProvider` resolves the acting user exclusively from the verified `SecurityContextHolder` principal. Client-supplied headers (`X-User-Id`, etc.) are ignored.
+  - **Team Scoping Matrix**:
+    - `ADMIN` (`system_role = 'ADMIN'`): Global visibility and mutation privileges across all teams.
+    - `MEMBER` / `TEAM_LEAD`: Restricted strictly to their assigned teams (`team_memberships`). Cross-team reads, updates, claiming, comments, and audit log access return `403 Forbidden`. Cross-team assignments return `400 Bad Request`.
+    - Unfiltered queue queries automatically filter by `team_id IN (userTeamIds)`.
+  - **Authorization Disclosure Policy (403 vs 404)**: Unauthorized access to existing foreign-team assets yields `403 Forbidden`, while non-existent UUIDs yield `404 Not Found`. For internal enterprise platforms, clearly separating permission boundaries from broken links prevents operational triage confusion.
+
+---
+
+### Decision 5: Unified Command-Center Design, Honest Authentication & Persistent Collaboration
+
+- **Context**: The user experience required an enterprise-grade command-center aesthetic suitable for executive presentations, combined with real team discussion capabilities, honest authentication disclosures, and responsive interaction without heavy client dependencies.
+- **Decision**:
+  - **Unified Authentication Experience**: Created a dedicated split-screen `/login` command center route, while sharing the identical `<AuthCard />` inside the in-app re-auth `<LoginDialog />`.
+  - **Session Persistence Synchronization**: The "Remember session on this device" control directly dictates whether tokens are stored in `localStorage` (persisting across restarts) or `sessionStorage` (ephemeral to the tab). Switching the option cleanly purges stale tokens from the opposite storage.
+  - **Honest Disclosures & No Mocked OAuth**: Avoided non-functional external OAuth buttons. Enterprise SSO (SAML 2.0 / OIDC) prerequisites are transparently explained, and unsubstantiated compliance badges (`SOC 2 Type II`, `ISO/IEC 27001`) were replaced with real architectural guarantees (ACID transactions, E-Tag preconditions, append-only audit, server-enforced RBAC).
+  - **Persistent Work-Item Comments**: Activated the relational `comments` table via JPA `Comment` entity and custom `CommentRepository` with `JOIN FETCH c.author` to eliminate N+1 queries. Comment author identity is derived strictly from the authenticated principal, validation enforces non-empty content under 5,000 characters, and comments are returned in deterministic chronological order (`createdAt ASC`).
+  - **Lightweight Design System**: Implemented a 4-tier dark command center token system (`.surface-subtle`, `.surface-elevated`, `.surface-overlay`) with CSS 3D perspective meters and tabular numerals (`tabular-nums`), eliminating bulky WebGL/Three.js bundles and ensuring full usability across standard browsers and keyboard navigation.

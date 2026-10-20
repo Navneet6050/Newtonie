@@ -299,12 +299,13 @@ cd backend
 ```
 
 Test coverage includes:
-1. **`SecurityAuthTests`**: 12 mandatory security scenarios covering login success, 401 on bad credentials/unauthenticated requests, token expiry, identity spoofing defense, cross-team read/mutation isolation (403), cross-team assignment rejection (400), team filter scoping, and user-scoped idempotency.
-2. **`ConcurrentClaimingTests`**: Concurrency under atomic claim with authenticated actors.
-3. **`OptimisticLockingTests`**: Optimistic locking, stale version rejection, ETag preconditions.
-4. **`IdempotencyTests`**: Transactional idempotency, payload mismatch conflict detection.
-5. **`WorkItemWorkflowTests`**: Full lifecycle workflow, validation, and activity log auditing.
-6. **`NewtoniteApplicationTests` & `HealthEndpointTests`**: Database migration validation and health probes.
+1. **`SecurityAuthTests`**: 15 security scenarios covering login success, 401 on bad credentials/unauthenticated requests, token expiry, identity spoofing defense, cross-team read/mutation isolation (403), cross-team assignment rejection (400), team filter scoping, and user-scoped idempotency.
+2. **`WorkItemCommentTests`**: 5 persistent comment collaboration scenarios covering authorized team discussion, cross-team access denial (403), admin cross-team commenting, blank content validation rejection (400), and automated activity log generation.
+3. **`ConcurrentClaimingTests`**: Concurrency under atomic claim with authenticated actors.
+4. **`OptimisticLockingTests`**: Optimistic locking, stale version rejection, ETag preconditions.
+5. **`IdempotencyTests`**: Transactional idempotency, payload mismatch conflict detection.
+6. **`WorkItemWorkflowTests`**: Full lifecycle workflow, validation, and activity log auditing.
+7. **`NewtoniteApplicationTests` & `HealthEndpointTests`**: Database migration validation and health probes.
 
 Package executable JAR:
 ```powershell
@@ -322,7 +323,10 @@ npm run build
 
 ## Current Limitations & Production-Hardening Requirements
 
-1. **Token Storage**: The frontend stores short-lived JWT tokens in session storage for the challenge demo. Production environments should use HTTP-only, SameSite=Strict cookies to guard against XSS token exfiltration.
-2. **Token Revocation**: Stateless JWTs cannot be revoked prior to expiration without a distributed token blacklist (e.g. Redis).
-3. **Brute Force Protection**: `/api/auth/login` does not currently implement IP or account rate-limiting / lockout. Production deployment should introduce Bucket4j or API gateway rate limiting.
-4. **Secret Management**: `JWT_SECRET` must be set via secure environment variables or a secret vault (e.g., AWS Secrets Manager, HashiCorp Vault) rather than the fallback development secret.
+1. **Enterprise SSO Registration**: Google Workspace and Microsoft Entra ID single sign-on require registered OAuth client IDs, client secrets, and authorized redirect URIs in production identity tenants. In this local sandbox, SSO prerequisites are clearly disclosed rather than mocked.
+2. **Browser Automation Sandbox**: Headless browser automation via Playwright was constrained in this sandbox by external network driver download blocks (`playwright.azureedge.net` 404). Verification was executed via full integration suites and live REST client automation.
+3. **Token Storage**: The frontend stores short-lived JWT tokens in `sessionStorage` or `localStorage` depending on operator preference. Production environments should use HTTP-only, SameSite=Strict cookies to guard against XSS token exfiltration.
+4. **Token Revocation**: Stateless JWTs cannot be revoked prior to expiration without a distributed token blacklist (e.g. Redis).
+5. **Brute Force Protection**: `/api/auth/login` does not currently implement IP or account rate-limiting / lockout. Production deployment should introduce Bucket4j or API gateway rate limiting.
+6. **Secret Management**: `JWT_SECRET` must be set via secure environment variables or a secret vault (e.g., AWS Secrets Manager, HashiCorp Vault) rather than the fallback development secret.
+
