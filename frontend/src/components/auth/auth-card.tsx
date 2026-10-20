@@ -109,7 +109,10 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
         <div className="mx-auto flex size-10 items-center justify-center rounded-xl border border-indigo-400/30 bg-indigo-500/15">
           <Layers className="size-5 text-indigo-300" />
         </div>
-        <h1 className="mt-4 text-center text-2xl font-semibold tracking-tight text-white">
+        <h1
+          id={isModal ? "login-dialog-title" : undefined}
+          className="mt-4 text-center text-2xl font-semibold tracking-tight text-white"
+        >
           Sign in
         </h1>
         <p className="mt-1.5 text-center text-sm text-white/50">

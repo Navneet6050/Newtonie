@@ -314,7 +314,7 @@ export function WorkItemDrawer({
         aria-hidden="true"
       />
 
-      <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
+      <div className="fixed inset-y-0 right-0 flex max-w-full pl-0 sm:pl-10">
         <aside
           aria-label="Work Item Details"
           className="w-screen max-w-lg surface-overlay text-zinc-100 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200 ease-out motion-reduce:animate-none"
@@ -427,7 +427,7 @@ export function WorkItemDrawer({
                 </div>
               </div>
             ) : error ? (
-              <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+              <div role="alert" className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
                 <AlertCircle className="size-4 shrink-0 text-rose-400 mt-0.5" />
                 <div>
                   <div className="font-semibold">Error</div>
@@ -635,6 +635,7 @@ export function WorkItemDrawer({
                               }
                             }}
                             disabled={isPostingComment}
+                            aria-label="Add a comment or incident update"
                             placeholder="Add a comment or incident update (⌘↵ to post)..."
                             rows={3}
                             maxLength={5000}

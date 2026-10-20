@@ -181,7 +181,7 @@ export function CreateItemDialog({
 
         {/* Validation / Error Alert */}
         {error && (
-          <div className="mt-3.5 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300 animate-in fade-in duration-150">
+          <div role="alert" className="mt-3.5 flex items-center gap-2 rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300 animate-in fade-in duration-150">
             <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
             <span>{error}</span>
           </div>

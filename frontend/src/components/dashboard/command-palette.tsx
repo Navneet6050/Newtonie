@@ -316,7 +316,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         />
         <DialogPrimitive.Content
           data-command-palette="true"
-          className="fixed left-1/2 top-[16%] sm:top-[20%] z-50 w-full max-w-xl -translate-x-1/2 rounded-xl border border-white/[0.09] bg-[#0c0d12] shadow-2xl transition-all data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:transition-none motion-reduce:animate-none overflow-hidden outline-none"
+          className="fixed left-1/2 top-[16%] sm:top-[20%] z-50 w-[calc(100%-1.5rem)] sm:w-full max-w-xl -translate-x-1/2 rounded-xl border border-white/[0.09] bg-[#0c0d12] shadow-2xl transition-all data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 motion-reduce:transition-none motion-reduce:animate-none overflow-hidden outline-none"
           onOpenAutoFocus={(e) => {
             e.preventDefault()
             inputRef.current?.focus()

@@ -841,7 +841,7 @@ export function WorkQueue() {
 
         {/* Error Banner */}
         {error && (
-          <div className="m-3 flex items-center justify-between rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
+          <div role="alert" className="m-3 flex items-center justify-between rounded-md border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-300">
             <div className="flex items-center gap-2">
               <AlertCircle className="size-3.5 shrink-0 text-rose-400" />
               <span>{error}</span>
