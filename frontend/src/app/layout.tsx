@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { MotionProvider } from "@/components/motion-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/lib/auth-context";
 import { LoginDialog } from "@/components/auth/login-dialog";
@@ -31,12 +32,14 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} dark h-full antialiased font-sans`}
     >
       <body className={`${geistSans.className} min-h-full flex flex-col bg-background text-foreground font-sans antialiased selection:bg-indigo-500/25 selection:text-indigo-200`}>
-        <TooltipProvider delayDuration={200}>
-          <AuthProvider>
-            {children}
-            <LoginDialog />
-          </AuthProvider>
-        </TooltipProvider>
+        <MotionProvider>
+          <TooltipProvider delayDuration={200}>
+            <AuthProvider>
+              {children}
+              <LoginDialog />
+            </AuthProvider>
+          </TooltipProvider>
+        </MotionProvider>
       </body>
     </html>
   );

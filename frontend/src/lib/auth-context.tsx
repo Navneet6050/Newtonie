@@ -24,7 +24,7 @@ const AuthContext = React.createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = React.useState<AuthUser | null>(null)
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(true)
   const [showLoginModal, setShowLoginModal] = React.useState(false)
 
   const refreshUser = React.useCallback(async () => {
@@ -48,10 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   React.useEffect(() => {
     let ignore = false
-    const token = getAuthToken()
-    if (!token) return
+    const handleUnauthorized = () => {
+      setUser(null)
+      setShowLoginModal(true)
+    }
+    window.addEventListener("newtonite:unauthorized", handleUnauthorized)
 
-    getCurrentUser()
+    Promise.resolve(getAuthToken() ? getCurrentUser() : null)
       .then((currentUser) => {
         if (!ignore) setUser(currentUser)
       })
@@ -61,12 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
         }
       })
-
-    const handleUnauthorized = () => {
-      setUser(null)
-      setShowLoginModal(true)
-    }
-    window.addEventListener("newtonite:unauthorized", handleUnauthorized)
+      .finally(() => {
+        if (!ignore) setIsLoading(false)
+      })
 
     return () => {
       ignore = true
