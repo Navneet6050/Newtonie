@@ -40,6 +40,7 @@ interface DashboardHeaderProps {
   workspaceName?: string
   searchValue?: string
   onSearchChange?: (value: string) => void
+  onNewItemClick?: () => void
 }
 
 export function DashboardHeader({
@@ -49,6 +50,7 @@ export function DashboardHeader({
   workspaceName = "Acme Studio",
   searchValue = "",
   onSearchChange,
+  onNewItemClick,
 }: DashboardHeaderProps) {
   const { user, logout, setShowLoginModal, isAuthenticated } = useAuth()
   const searchInputRef = React.useRef<HTMLInputElement>(null)
@@ -189,7 +191,8 @@ export function DashboardHeader({
         {/* Quick Action Button */}
         <Button
           size="sm"
-          className="hidden md:inline-flex h-8 gap-1.5 border border-indigo-500/30 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 hover:text-indigo-200 hover:border-indigo-500/50 text-xs font-medium"
+          onClick={onNewItemClick}
+          className="hidden md:inline-flex h-8 gap-1.5 border border-indigo-500/30 bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/30 hover:text-indigo-200 hover:border-indigo-500/50 text-xs font-medium cursor-pointer"
         >
           <Plus className="size-3.5" />
           <span>New Item</span>

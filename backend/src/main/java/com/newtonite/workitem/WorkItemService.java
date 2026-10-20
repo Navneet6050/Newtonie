@@ -16,6 +16,7 @@ import com.newtonite.team.UserRepository;
 import com.newtonite.workitem.dto.CreateWorkItemRequest;
 import com.newtonite.workitem.dto.PagedResponse;
 import com.newtonite.workitem.dto.UpdateWorkItemRequest;
+import com.newtonite.workitem.dto.WorkItemMetricsResponse;
 import com.newtonite.workitem.dto.WorkItemResponse;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -168,7 +169,7 @@ public class WorkItemService {
     public PagedResponse<WorkItemResponse> listWorkItems(
             String search,
             WorkItemStatus status,
-            WorkItemPriority priority,
+            List<WorkItemPriority> priorities,
             WorkItemType type,
             UUID teamId,
             UUID assigneeId,
@@ -192,11 +193,86 @@ public class WorkItemService {
         }
 
         Specification<WorkItem> spec = WorkItemSpecification.filterBy(
-                search, status, priority, type, teamId, allowedTeamIds, assigneeId, systemArea
+                search, status, priorities, type, teamId, allowedTeamIds, assigneeId, systemArea
         );
 
         Page<WorkItem> page = workItemRepository.findAll(spec, pageable);
         return PagedResponse.from(page, WorkItemResponse::from);
+    }
+
+    @Transactional(readOnly = true)
+    public PagedResponse<WorkItemResponse> listWorkItems(
+            String search,
+            WorkItemStatus status,
+            WorkItemPriority priority,
+            WorkItemType type,
+            UUID teamId,
+            UUID assigneeId,
+            String systemArea,
+            Pageable pageable) {
+        return listWorkItems(
+                search,
+                status,
+                priority != null ? List.of(priority) : null,
+                type,
+                teamId,
+                assigneeId,
+                systemArea,
+                pageable
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public WorkItemMetricsResponse getWorkItemMetrics(UUID teamId) {
+        User actor = currentUserProvider.getCurrentUser();
+        List<UUID> allowedTeamIds = null;
+
+        if (!isAdmin(actor)) {
+            List<TeamMembership> memberships = teamMembershipRepository.findByUserId(actor.getId());
+            List<UUID> userTeamIds = memberships.stream().map(m -> m.getTeam().getId()).toList();
+
+            if (teamId != null) {
+                if (!userTeamIds.contains(teamId)) {
+                    throw new AccessDeniedException("Access denied: user is not a member of team " + teamId);
+                }
+            } else {
+                allowedTeamIds = userTeamIds;
+            }
+        }
+
+        long totalCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, null, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long openCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, WorkItemStatus.OPEN, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long inProgressCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, WorkItemStatus.IN_PROGRESS, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long reviewNeededCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, WorkItemStatus.REVIEW_NEEDED, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long completedCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, WorkItemStatus.COMPLETED, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long blockedCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, WorkItemStatus.BLOCKED, (List<WorkItemPriority>) null, null, teamId, allowedTeamIds, null, null
+        ));
+        long urgentCount = workItemRepository.count(WorkItemSpecification.filterBy(
+                null, null, List.of(WorkItemPriority.URGENT), null, teamId, allowedTeamIds, null, null
+        ));
+        long blockedOrUrgentCount = workItemRepository.count(WorkItemSpecification.blockedOrUrgent(teamId, allowedTeamIds));
+
+        return new WorkItemMetricsResponse(
+                openCount,
+                inProgressCount,
+                reviewNeededCount,
+                completedCount,
+                blockedCount,
+                urgentCount,
+                blockedOrUrgentCount,
+                totalCount
+        );
     }
 
     @Transactional

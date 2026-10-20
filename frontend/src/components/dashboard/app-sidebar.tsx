@@ -42,13 +42,15 @@ interface AppSidebarProps {
   onNavSelect: (key: NavItemKey) => void
   currentWorkspace?: string
   onWorkspaceChange?: (workspace: string) => void
+  onTeamSelect?: (teamId: string | undefined) => void
 }
 
-const WORKSPACES = [
-  { id: "acme-studio", name: "Acme Studio", role: "Primary Workspace", isCurrent: true },
-  { id: "acme-platform", name: "Acme Platform", role: "Engineering Team", isCurrent: false },
-  { id: "acme-infra", name: "Acme Cloud Infra", role: "Site Reliability", isCurrent: false },
-]
+interface WorkspaceItem {
+  id: string
+  name: string
+  role: string
+  teamId?: string
+}
 
 export function AppSidebar({
   isOpen,
@@ -57,16 +59,54 @@ export function AppSidebar({
   onNavSelect,
   currentWorkspace = "Acme Studio",
   onWorkspaceChange,
+  onTeamSelect,
 }: AppSidebarProps) {
   const { user, logout, setShowLoginModal, isAuthenticated } = useAuth()
   const [internalWorkspace, setInternalWorkspace] = React.useState("Acme Studio")
-  const activeWorkspace = onWorkspaceChange ? currentWorkspace : internalWorkspace
 
-  const handleSelectWorkspace = (name: string) => {
+  const availableWorkspaces: WorkspaceItem[] = React.useMemo(() => {
+    if (!user) {
+      return [
+        { id: "acme-studio", name: "Acme Studio", role: "Primary Workspace", teamId: undefined },
+      ]
+    }
+    if (user.systemRole === "ADMIN") {
+      return [
+        { id: "all", name: "All Workspaces", role: "Global Admin", teamId: undefined },
+        { id: "acme-studio", name: "Acme Studio", role: "Primary Workspace", teamId: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" },
+        { id: "acme-platform", name: "Acme Platform", role: "Engineering Team", teamId: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb" },
+        { id: "acme-infra", name: "Acme Cloud Infra", role: "Site Reliability", teamId: "cccccccc-cccc-cccc-cccc-cccccccccccc" },
+      ]
+    }
+    if (user.teams && user.teams.length > 0) {
+      return user.teams.map((t) => ({
+        id: t.teamId,
+        name: t.teamName,
+        role: t.role,
+        teamId: t.teamId,
+      }))
+    }
+    return [
+      { id: "acme-studio", name: "Acme Studio", role: "Primary Workspace", teamId: undefined },
+    ]
+  }, [user])
+
+  const activeWorkspace = React.useMemo(() => {
+    const raw = onWorkspaceChange ? currentWorkspace : internalWorkspace
+    if (availableWorkspaces.some((w) => w.name === raw)) {
+      return raw
+    }
+    return availableWorkspaces[0]?.name ?? "Acme Studio"
+  }, [availableWorkspaces, onWorkspaceChange, currentWorkspace, internalWorkspace])
+
+  const handleSelectWorkspace = (ws: WorkspaceItem) => {
     if (onWorkspaceChange) {
-      onWorkspaceChange(name)
+      onWorkspaceChange(ws.name)
     } else {
-      setInternalWorkspace(name)
+      setInternalWorkspace(ws.name)
+    }
+    if (onTeamSelect) {
+      onTeamSelect(ws.teamId)
     }
   }
 
@@ -92,13 +132,13 @@ export function AppSidebar({
       key: "my_work" as NavItemKey,
       label: "My Work",
       icon: CheckSquare,
-      badge: "12",
+      badge: null,
     },
     {
       key: "all_work_items" as NavItemKey,
       label: "All Work Items",
       icon: Layers,
-      badge: "128",
+      badge: null,
     },
     {
       key: "teams" as NavItemKey,
@@ -227,10 +267,10 @@ export function AppSidebar({
                 Workspaces
               </DropdownMenuLabel>
               <DropdownMenuSeparator className="bg-white/[0.06]" />
-              {WORKSPACES.map((ws) => (
+              {availableWorkspaces.map((ws) => (
                 <DropdownMenuItem
                   key={ws.id}
-                  onClick={() => handleSelectWorkspace(ws.name)}
+                  onClick={() => handleSelectWorkspace(ws)}
                   className="flex items-center justify-between text-xs cursor-pointer hover:bg-white/[0.05] focus:bg-white/[0.05]"
                 >
                   <div>

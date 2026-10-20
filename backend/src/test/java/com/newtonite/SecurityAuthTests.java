@@ -7,6 +7,7 @@ import com.newtonite.security.dto.LoginRequest;
 import com.newtonite.support.TestTokenProvider;
 import com.newtonite.team.User;
 import com.newtonite.workitem.WorkItemPriority;
+import com.newtonite.workitem.WorkItemStatus;
 import com.newtonite.workitem.WorkItemType;
 import com.newtonite.workitem.dto.CreateWorkItemRequest;
 import com.newtonite.workitem.dto.UpdateWorkItemRequest;
@@ -349,5 +350,271 @@ public class SecurityAuthTests {
 
         UUID retryId = UUID.fromString(objectMapper.readTree(sarahRetry.getResponse().getContentAsString()).get("id").asText());
         assertThat(retryId).isEqualTo(sarahCreatedId);
+    }
+
+    @Test
+    @DisplayName("13. Work item metrics endpoint enforces team scoping and authorization")
+    void testMetricsTeamAuthorization() throws Exception {
+        // A. Unauthenticated call is rejected with 401
+        mockMvc.perform(get("/api/work-items/metrics"))
+                .andExpect(status().isUnauthorized());
+
+        String sarahToken = tokenProvider.sarahChenToken();
+        String adminToken = tokenProvider.alexMorganToken();
+
+        // B. Sarah (Acme Studio) requesting Acme Platform metrics is rejected with 403
+        mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", sarahToken)
+                        .param("teamId", TEAM_ACME_PLATFORM_ID.toString()))
+                .andExpect(status().isForbidden());
+
+        // C. Sarah gets her team's metrics
+        MvcResult sarahMetricsResult = mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", sarahToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openCount").isNumber())
+                .andExpect(jsonPath("$.inProgressCount").isNumber())
+                .andExpect(jsonPath("$.blockedCount").isNumber())
+                .andExpect(jsonPath("$.urgentCount").isNumber())
+                .andExpect(jsonPath("$.blockedOrUrgentCount").isNumber())
+                .andExpect(jsonPath("$.totalCount").isNumber())
+                .andReturn();
+
+        JsonNode sarahMetrics = objectMapper.readTree(sarahMetricsResult.getResponse().getContentAsString());
+        assertThat(sarahMetrics.get("totalCount").asLong()).isGreaterThanOrEqualTo(0);
+        long blocked = sarahMetrics.get("blockedCount").asLong();
+        long urgent = sarahMetrics.get("urgentCount").asLong();
+        long distinctBlockedOrUrgent = sarahMetrics.get("blockedOrUrgentCount").asLong();
+        assertThat(distinctBlockedOrUrgent).isLessThanOrEqualTo(blocked + urgent);
+
+        // D. Admin Alex can view metrics for Acme Platform
+        mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", adminToken)
+                        .param("teamId", TEAM_ACME_PLATFORM_ID.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalCount").isNumber())
+                .andExpect(jsonPath("$.blockedOrUrgentCount").isNumber());
+    }
+
+    @Test
+    @DisplayName("14. Deterministic distinct blocked-or-urgent metrics calculation and team isolation")
+    void testDeterministicBlockedOrUrgentMetrics() throws Exception {
+        String sarahToken = tokenProvider.sarahChenToken();
+        String liamToken = tokenProvider.liamVanceToken();
+
+        // 1. Capture baseline metrics for Sarah (Acme Studio) and Liam (Acme Platform)
+        MvcResult sarahBaseResult = mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", sarahToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode sarahBase = objectMapper.readTree(sarahBaseResult.getResponse().getContentAsString());
+        long sarahBaseBlocked = sarahBase.get("blockedCount").asLong();
+        long sarahBaseUrgent = sarahBase.get("urgentCount").asLong();
+        long sarahBaseDistinct = sarahBase.get("blockedOrUrgentCount").asLong();
+        long sarahBaseTotal = sarahBase.get("totalCount").asLong();
+
+        MvcResult liamBaseResult = mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", liamToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode liamBase = objectMapper.readTree(liamBaseResult.getResponse().getContentAsString());
+        long liamBaseDistinct = liamBase.get("blockedOrUrgentCount").asLong();
+        long liamBaseTotal = liamBase.get("totalCount").asLong();
+
+        // 2. Sarah creates 4 deterministic items for Acme Studio:
+        // Item 1: BLOCKED + URGENT (both categories)
+        CreateWorkItemRequest item1 = new CreateWorkItemRequest(
+                "Metric Test 1: Blocked and Urgent",
+                "Both categories",
+                WorkItemType.TASK,
+                WorkItemPriority.URGENT,
+                "Metrics",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+        MvcResult r1 = mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", sarahToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(item1)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID id1 = UUID.fromString(objectMapper.readTree(r1.getResponse().getContentAsString()).get("id").asText());
+        UpdateWorkItemRequest block1 = new UpdateWorkItemRequest();
+        block1.setStatus(WorkItemStatus.BLOCKED);
+        block1.setExpectedVersion(0L);
+        mockMvc.perform(patch("/api/work-items/" + id1)
+                        .header("Authorization", sarahToken)
+                        .header("If-Match", "\"0\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(block1)))
+                .andExpect(status().isOk());
+
+        // Item 2: BLOCKED only (status BLOCKED, priority MEDIUM)
+        CreateWorkItemRequest item2 = new CreateWorkItemRequest(
+                "Metric Test 2: Blocked Only",
+                "Blocked only",
+                WorkItemType.TASK,
+                WorkItemPriority.MEDIUM,
+                "Metrics",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+        MvcResult r2 = mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", sarahToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(item2)))
+                .andExpect(status().isCreated())
+                .andReturn();
+        UUID id2 = UUID.fromString(objectMapper.readTree(r2.getResponse().getContentAsString()).get("id").asText());
+        UpdateWorkItemRequest block2 = new UpdateWorkItemRequest();
+        block2.setStatus(WorkItemStatus.BLOCKED);
+        block2.setExpectedVersion(0L);
+        mockMvc.perform(patch("/api/work-items/" + id2)
+                        .header("Authorization", sarahToken)
+                        .header("If-Match", "\"0\"")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(block2)))
+                .andExpect(status().isOk());
+
+        // Item 3: URGENT only (status OPEN, priority URGENT)
+        CreateWorkItemRequest item3 = new CreateWorkItemRequest(
+                "Metric Test 3: Urgent Only",
+                "Urgent only",
+                WorkItemType.TASK,
+                WorkItemPriority.URGENT,
+                "Metrics",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+        mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", sarahToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(item3)))
+                .andExpect(status().isCreated());
+
+        // Item 4: Ordinary item (status OPEN, priority LOW)
+        CreateWorkItemRequest item4 = new CreateWorkItemRequest(
+                "Metric Test 4: Ordinary",
+                "Neither blocked nor urgent",
+                WorkItemType.TASK,
+                WorkItemPriority.LOW,
+                "Metrics",
+                TEAM_ACME_STUDIO_ID,
+                null,
+                null
+        );
+        mockMvc.perform(post("/api/work-items")
+                        .header("Authorization", sarahToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(item4)))
+                .andExpect(status().isCreated());
+
+        // 3. Re-query Sarah's metrics and assert exact deterministic deltas
+        MvcResult sarahPostResult = mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", sarahToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode sarahPost = objectMapper.readTree(sarahPostResult.getResponse().getContentAsString());
+
+        long newTotal = sarahPost.get("totalCount").asLong();
+        long newBlocked = sarahPost.get("blockedCount").asLong();
+        long newUrgent = sarahPost.get("urgentCount").asLong();
+        long newDistinct = sarahPost.get("blockedOrUrgentCount").asLong();
+
+        assertThat(newTotal).isEqualTo(sarahBaseTotal + 4);
+        assertThat(newBlocked).isEqualTo(sarahBaseBlocked + 2); // items 1 and 2
+        assertThat(newUrgent).isEqualTo(sarahBaseUrgent + 2);   // items 1 and 3
+
+        // CRITICAL CHECK: Raw sum adds 4, but distinct count only adds 3!
+        // Because item 1 is in both categories and item 4 is in neither!
+        assertThat(newDistinct).isEqualTo(sarahBaseDistinct + 3);
+
+        // 4. Verify team scoping: Liam's team metrics must be completely unaffected
+        MvcResult liamPostResult = mockMvc.perform(get("/api/work-items/metrics")
+                        .header("Authorization", liamToken))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode liamPost = objectMapper.readTree(liamPostResult.getResponse().getContentAsString());
+        assertThat(liamPost.get("totalCount").asLong()).isEqualTo(liamBaseTotal);
+        assertThat(liamPost.get("blockedOrUrgentCount").asLong()).isEqualTo(liamBaseDistinct);
+    }
+
+    @Test
+    @DisplayName("15. Priority filtering contract: comma-separated and repeated params match pagination totals")
+    void testPriorityFilterContractAndPagination() throws Exception {
+        String adminToken = tokenProvider.alexMorganToken();
+
+        // 1. Query individual priority totals
+        MvcResult urgentRes = mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", adminToken)
+                        .param("priority", "URGENT")
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long urgentTotal = objectMapper.readTree(urgentRes.getResponse().getContentAsString()).get("totalElements").asLong();
+
+        MvcResult highRes = mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", adminToken)
+                        .param("priority", "HIGH")
+                        .param("size", "100"))
+                .andExpect(status().isOk())
+                .andReturn();
+        long highTotal = objectMapper.readTree(highRes.getResponse().getContentAsString()).get("totalElements").asLong();
+
+        long expectedCombinedTotal = urgentTotal + highTotal;
+
+        // 2. Repeated query params: ?priority=URGENT&priority=HIGH
+        MvcResult repeatedRes = mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", adminToken)
+                        .param("priority", "URGENT", "HIGH"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode repeatedJson = objectMapper.readTree(repeatedRes.getResponse().getContentAsString());
+        long repeatedTotal = repeatedJson.get("totalElements").asLong();
+        assertThat(repeatedTotal).isEqualTo(expectedCombinedTotal);
+
+        // 3. Comma-separated query param: ?priority=URGENT,HIGH
+        MvcResult commaRes = mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", adminToken)
+                        .param("priority", "URGENT,HIGH"))
+                .andExpect(status().isOk())
+                .andReturn();
+        JsonNode commaJson = objectMapper.readTree(commaRes.getResponse().getContentAsString());
+        long commaTotal = commaJson.get("totalElements").asLong();
+        assertThat(commaTotal).isEqualTo(expectedCombinedTotal);
+
+        // 4. Verify server-side pagination with filtered results
+        if (expectedCombinedTotal >= 2) {
+            MvcResult page0Res = mockMvc.perform(get("/api/work-items")
+                            .header("Authorization", adminToken)
+                            .param("priority", "URGENT,HIGH")
+                            .param("page", "0")
+                            .param("size", "1"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            JsonNode page0Json = objectMapper.readTree(page0Res.getResponse().getContentAsString());
+            assertThat(page0Json.get("totalElements").asLong()).isEqualTo(expectedCombinedTotal);
+            assertThat(page0Json.get("totalPages").asLong()).isEqualTo(expectedCombinedTotal);
+            assertThat(page0Json.get("content").size()).isEqualTo(1);
+            String item0Id = page0Json.get("content").get(0).get("id").asText();
+
+            MvcResult page1Res = mockMvc.perform(get("/api/work-items")
+                            .header("Authorization", adminToken)
+                            .param("priority", "URGENT,HIGH")
+                            .param("page", "1")
+                            .param("size", "1"))
+                    .andExpect(status().isOk())
+                    .andReturn();
+            JsonNode page1Json = objectMapper.readTree(page1Res.getResponse().getContentAsString());
+            assertThat(page1Json.get("totalElements").asLong()).isEqualTo(expectedCombinedTotal);
+            assertThat(page1Json.get("content").size()).isEqualTo(1);
+            String item1Id = page1Json.get("content").get(0).get("id").asText();
+
+            // Distinct items across pages
+            assertThat(item1Id).isNotEqualTo(item0Id);
+        }
     }
 }

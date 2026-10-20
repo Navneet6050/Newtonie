@@ -5,6 +5,7 @@ import com.newtonite.activity.dto.ActivityLogResponse;
 import com.newtonite.workitem.dto.CreateWorkItemRequest;
 import com.newtonite.workitem.dto.PagedResponse;
 import com.newtonite.workitem.dto.UpdateWorkItemRequest;
+import com.newtonite.workitem.dto.WorkItemMetricsResponse;
 import com.newtonite.workitem.dto.WorkItemResponse;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.PageRequest;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.URI;
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -49,7 +51,7 @@ public class WorkItemController {
     public ResponseEntity<PagedResponse<WorkItemResponse>> listWorkItems(
             @RequestParam(required = false) String search,
             @RequestParam(required = false) WorkItemStatus status,
-            @RequestParam(required = false) WorkItemPriority priority,
+            @RequestParam(required = false) List<WorkItemPriority> priority,
             @RequestParam(required = false) WorkItemType type,
             @RequestParam(required = false) UUID teamId,
             @RequestParam(required = false) UUID assigneeId,
@@ -68,6 +70,13 @@ public class WorkItemController {
                 search, status, priority, type, teamId, assigneeId, systemArea, pageable
         );
         return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/metrics")
+    public ResponseEntity<WorkItemMetricsResponse> getMetrics(
+            @RequestParam(required = false) UUID teamId) {
+        WorkItemMetricsResponse metrics = workItemService.getWorkItemMetrics(teamId);
+        return ResponseEntity.ok(metrics);
     }
 
     @GetMapping("/{id}")

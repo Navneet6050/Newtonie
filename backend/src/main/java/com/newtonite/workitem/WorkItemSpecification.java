@@ -12,7 +12,7 @@ public class WorkItemSpecification {
     public static Specification<WorkItem> filterBy(
             String search,
             WorkItemStatus status,
-            WorkItemPriority priority,
+            List<WorkItemPriority> priorities,
             WorkItemType type,
             UUID teamId,
             List<UUID> allowedTeamIds,
@@ -34,8 +34,12 @@ public class WorkItemSpecification {
                 predicates.add(cb.equal(root.get("status"), status));
             }
 
-            if (priority != null) {
-                predicates.add(cb.equal(root.get("priority"), priority));
+            if (priorities != null && !priorities.isEmpty()) {
+                if (priorities.size() == 1) {
+                    predicates.add(cb.equal(root.get("priority"), priorities.get(0)));
+                } else {
+                    predicates.add(root.get("priority").in(priorities));
+                }
             }
 
             if (type != null) {
@@ -58,6 +62,52 @@ public class WorkItemSpecification {
 
             if (systemArea != null && !systemArea.isBlank()) {
                 predicates.add(cb.equal(cb.lower(root.get("systemArea")), systemArea.trim().toLowerCase()));
+            }
+
+            return cb.and(predicates.toArray(new Predicate[0]));
+        };
+    }
+
+    public static Specification<WorkItem> filterBy(
+            String search,
+            WorkItemStatus status,
+            WorkItemPriority priority,
+            WorkItemType type,
+            UUID teamId,
+            List<UUID> allowedTeamIds,
+            UUID assigneeId,
+            String systemArea) {
+        return filterBy(
+                search,
+                status,
+                priority != null ? List.of(priority) : null,
+                type,
+                teamId,
+                allowedTeamIds,
+                assigneeId,
+                systemArea
+        );
+    }
+
+    /**
+     * Specification that counts distinct items that are either BLOCKED or URGENT (preventing double counting)
+     */
+    public static Specification<WorkItem> blockedOrUrgent(UUID teamId, List<UUID> allowedTeamIds) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+
+            Predicate isBlocked = cb.equal(root.get("status"), WorkItemStatus.BLOCKED);
+            Predicate isUrgent = cb.equal(root.get("priority"), WorkItemPriority.URGENT);
+            predicates.add(cb.or(isBlocked, isUrgent));
+
+            if (teamId != null) {
+                predicates.add(cb.equal(root.get("team").get("id"), teamId));
+            } else if (allowedTeamIds != null) {
+                if (allowedTeamIds.isEmpty()) {
+                    predicates.add(cb.disjunction());
+                } else {
+                    predicates.add(root.get("team").get("id").in(allowedTeamIds));
+                }
             }
 
             return cb.and(predicates.toArray(new Predicate[0]));

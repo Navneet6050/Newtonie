@@ -3,13 +3,18 @@
 import * as React from "react"
 import {
   AlertCircle,
-  ArrowUpRight,
+  ArrowRight,
   Check,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock,
   Copy,
   Inbox,
+  Loader2,
+  Lock,
   MoreHorizontal,
+  RotateCw,
   Search,
   UserCheck,
   X,
@@ -26,200 +31,181 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { useDashboardSearch } from "./dashboard-shell"
-
-export type WorkItemPriority = "urgent" | "high" | "medium" | "low"
-export type WorkItemStatus = "in_progress" | "review_needed" | "todo" | "completed"
-
-export interface WorkItem {
-  id: string
-  title: string
-  type: "Incident" | "Task" | "Bug" | "Ops"
-  status: WorkItemStatus
-  priority: WorkItemPriority
-  assignedTo: {
-    name: string
-    initials: string
-  }
-  dueDate: string
-  systemArea: string
-}
-
-const SAMPLE_WORK_ITEMS: WorkItem[] = [
-  {
-    id: "NEW-1042",
-    title: "Database connection pool exhaustion during peak ingest",
-    type: "Incident",
-    status: "in_progress",
-    priority: "urgent",
-    assignedTo: { name: "Alex Morgan", initials: "AM" },
-    dueDate: "Today, 18:00",
-    systemArea: "Data Pipeline",
-  },
-  {
-    id: "NEW-1038",
-    title: "Refactor Kafka consumer rebalance listener for partition loss",
-    type: "Task",
-    status: "review_needed",
-    priority: "high",
-    assignedTo: { name: "Alex Morgan", initials: "AM" },
-    dueDate: "Tomorrow",
-    systemArea: "Event Bus",
-  },
-  {
-    id: "NEW-1035",
-    title: "Provision multi-region Redis cluster for distributed session cache",
-    type: "Task",
-    status: "in_progress",
-    priority: "high",
-    assignedTo: { name: "Sarah Chen", initials: "SC" },
-    dueDate: "Oct 22",
-    systemArea: "Infrastructure",
-  },
-  {
-    id: "NEW-1029",
-    title: "Audit CORS wildcard policy on internal telemetry edge gateway",
-    type: "Bug",
-    status: "review_needed",
-    priority: "high",
-    assignedTo: { name: "Marcus Bell", initials: "MB" },
-    dueDate: "Oct 23",
-    systemArea: "Security Gateway",
-  },
-  {
-    id: "NEW-1024",
-    title: "Rotate expiring TLS root authority certificates on metrics proxy",
-    type: "Ops",
-    status: "todo",
-    priority: "medium",
-    assignedTo: { name: "Alex Morgan", initials: "AM" },
-    dueDate: "Oct 25",
-    systemArea: "Telemetry",
-  },
-  {
-    id: "NEW-1017",
-    title: "Benchmark gRPC serialization throughput under synthetic 50k RPS",
-    type: "Task",
-    status: "todo",
-    priority: "low",
-    assignedTo: { name: "Elena Rostova", initials: "ER" },
-    dueDate: "Oct 28",
-    systemArea: "Core Engine",
-  },
-]
+import { useDashboard } from "./dashboard-shell"
+import { useAuth } from "@/lib/auth-context"
+import {
+  type BackendWorkItem,
+  type BackendWorkItemPriority,
+  type BackendWorkItemStatus,
+  claimWorkItem,
+  fetchWorkItems,
+} from "@/lib/api"
 
 type FilterType = "all" | "high_priority" | "in_progress" | "review_needed"
 
-const FILTER_PREDICATES: Record<FilterType, (item: WorkItem) => boolean> = {
-  all: () => true,
-  high_priority: (item) => item.priority === "urgent" || item.priority === "high",
-  in_progress: (item) => item.status === "in_progress",
-  review_needed: (item) => item.status === "review_needed",
-}
-
-interface WorkQueueProps {
-  searchQuery?: string
-  onSearchChange?: (query: string) => void
-}
-
-export function WorkQueue({
-  searchQuery: externalSearchQuery,
-  onSearchChange: externalOnSearchChange,
-}: WorkQueueProps = {}) {
-  const { searchQuery: contextSearchQuery, setSearchQuery: contextSetSearchQuery } =
-    useDashboardSearch()
-  const [internalSearchQuery, setInternalSearchQuery] = React.useState("")
-
-  const isExplicitlyControlled = externalSearchQuery !== undefined
-  const searchQuery = isExplicitlyControlled
-    ? externalSearchQuery
-    : (contextSearchQuery !== undefined ? contextSearchQuery : internalSearchQuery)
-
-  const setSearchQuery = (query: string) => {
-    if (externalOnSearchChange) {
-      externalOnSearchChange(query)
-    } else if (contextSetSearchQuery) {
-      contextSetSearchQuery(query)
-    } else {
-      setInternalSearchQuery(query)
-    }
-  }
+export function WorkQueue() {
+  const { user, isAuthenticated, setShowLoginModal } = useAuth()
+  const {
+    searchQuery,
+    setSearchQuery,
+    openItemDetails,
+    triggerRefresh,
+    refreshKey,
+    selectedTeamId,
+    activeNav,
+  } = useDashboard()
 
   const [activeFilter, setActiveFilter] = React.useState<FilterType>("all")
-  const [items, setItems] = React.useState<WorkItem[]>(SAMPLE_WORK_ITEMS)
+  const [items, setItems] = React.useState<BackendWorkItem[]>([])
+  const [page, setPage] = React.useState(0)
+  const [totalPages, setTotalPages] = React.useState(1)
+  const [totalElements, setTotalElements] = React.useState(0)
+
+  const [isLoading, setIsLoading] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
+  const [claimingId, setClaimingId] = React.useState<string | null>(null)
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
 
-  const handleCopyId = (id: string) => {
-    if (typeof navigator !== "undefined" && navigator.clipboard) {
-      navigator.clipboard.writeText(id).catch(() => {})
+  // Debounced search to avoid overwhelming backend on fast typing
+  const [debouncedSearch, setDebouncedSearch] = React.useState(searchQuery)
+  React.useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setPage(0)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
+  // Reset pagination when switching teams or navigation tabs
+  const [prevTeamId, setPrevTeamId] = React.useState(selectedTeamId)
+  const [prevActiveNav, setPrevActiveNav] = React.useState(activeNav)
+
+  if (selectedTeamId !== prevTeamId || activeNav !== prevActiveNav) {
+    setPrevTeamId(selectedTeamId)
+    setPrevActiveNav(activeNav)
+    setPage(0)
+  }
+
+  const loadQueue = React.useCallback(() => {
+    if (!isAuthenticated) {
+      setItems([])
+      setTotalElements(0)
+      setTotalPages(1)
+      return
     }
-    setCopiedId(id)
+
+    setIsLoading(true)
+    setError(null)
+
+    let statusParam: BackendWorkItemStatus | undefined = undefined
+    let priorityParam: string | undefined = undefined
+    if (activeFilter === "in_progress") {
+      statusParam = "IN_PROGRESS"
+    } else if (activeFilter === "review_needed") {
+      statusParam = "REVIEW_NEEDED"
+    } else if (activeFilter === "high_priority") {
+      priorityParam = "URGENT,HIGH"
+    }
+    const assigneeParam = activeNav === "my_work" && user ? user.id : undefined
+
+    fetchWorkItems({
+      search: debouncedSearch.trim() || undefined,
+      status: statusParam,
+      priority: priorityParam,
+      teamId: selectedTeamId,
+      assigneeId: assigneeParam,
+      page,
+      size: 10,
+      sort: "updatedAt,desc",
+    })
+      .then((res) => {
+        setItems(res.content || [])
+        setTotalElements(res.totalElements)
+        setTotalPages(Math.max(1, res.totalPages))
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Failed to fetch work items queue.")
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }, [isAuthenticated, activeFilter, debouncedSearch, selectedTeamId, activeNav, user, page])
+
+  React.useEffect(() => {
+    if (!isAuthenticated) {
+      return
+    }
+
+    let isMounted = true
+    let statusParam: BackendWorkItemStatus | undefined = undefined
+    let priorityParam: string | undefined = undefined
+    if (activeFilter === "in_progress") {
+      statusParam = "IN_PROGRESS"
+    } else if (activeFilter === "review_needed") {
+      statusParam = "REVIEW_NEEDED"
+    } else if (activeFilter === "high_priority") {
+      priorityParam = "URGENT,HIGH"
+    }
+    const assigneeParam = activeNav === "my_work" && user ? user.id : undefined
+
+    fetchWorkItems({
+      search: debouncedSearch.trim() || undefined,
+      status: statusParam,
+      priority: priorityParam,
+      teamId: selectedTeamId,
+      assigneeId: assigneeParam,
+      page,
+      size: 10,
+      sort: "updatedAt,desc",
+    })
+      .then((res) => {
+        if (!isMounted) return
+        setItems(res.content || [])
+        setTotalElements(res.totalElements)
+        setTotalPages(Math.max(1, res.totalPages))
+      })
+      .catch((err: unknown) => {
+        if (!isMounted) return
+        setError(err instanceof Error ? err.message : "Failed to fetch work items queue.")
+      })
+      .finally(() => {
+        if (isMounted) setIsLoading(false)
+      })
+
+    return () => {
+      isMounted = false
+    }
+  }, [isAuthenticated, activeFilter, debouncedSearch, selectedTeamId, activeNav, user, page, refreshKey])
+
+  const handleCopyId = (e: React.MouseEvent, trackingNumber: string) => {
+    e.stopPropagation()
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(trackingNumber).catch(() => {})
+    }
+    setCopiedId(trackingNumber)
     setTimeout(() => {
-      setCopiedId((curr) => (curr === id ? null : curr))
+      setCopiedId((curr) => (curr === trackingNumber ? null : curr))
     }, 2000)
   }
 
-  const handleAssignToMe = (id: string) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              assignedTo:
-                item.assignedTo.name === "Alex Morgan"
-                  ? { name: "Unassigned", initials: "UN" }
-                  : { name: "Alex Morgan", initials: "AM" },
-            }
-          : item
-      )
-    )
-  }
-
-  const handleToggleStatus = (id: string) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: item.status === "completed" ? "in_progress" : "completed",
-            }
-          : item
-      )
-    )
-  }
-
-  // 1. First filter items based on search query across id, title, systemArea, assignee
-  const itemsMatchingSearch = React.useMemo(() => {
-    if (!searchQuery.trim()) return items
-    const query = searchQuery.toLowerCase().trim()
-    return items.filter((item) => {
-      return (
-        item.id.toLowerCase().includes(query) ||
-        item.title.toLowerCase().includes(query) ||
-        item.systemArea.toLowerCase().includes(query) ||
-        item.assignedTo.name.toLowerCase().includes(query)
-      )
-    })
-  }, [items, searchQuery])
-
-  // 2. Derive filter counts strictly from the data matching search to prevent any count drift
-  const counts = React.useMemo(() => {
-    return {
-      all: itemsMatchingSearch.filter(FILTER_PREDICATES.all).length,
-      high_priority: itemsMatchingSearch.filter(FILTER_PREDICATES.high_priority).length,
-      in_progress: itemsMatchingSearch.filter(FILTER_PREDICATES.in_progress).length,
-      review_needed: itemsMatchingSearch.filter(FILTER_PREDICATES.review_needed).length,
+  const handleClaim = async (e: React.MouseEvent, item: BackendWorkItem) => {
+    e.stopPropagation()
+    setClaimingId(item.id)
+    try {
+      await claimWorkItem(item.id)
+      triggerRefresh()
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        alert(err.message)
+      }
+    } finally {
+      setClaimingId(null)
     }
-  }, [itemsMatchingSearch])
+  }
 
-  // 3. Current displayed items always match the selected filter and its count exactly
-  const filteredItems = React.useMemo(() => {
-    return itemsMatchingSearch.filter(FILTER_PREDICATES[activeFilter])
-  }, [itemsMatchingSearch, activeFilter])
-
-  const getStatusBadge = (status: WorkItemStatus) => {
+  const getStatusBadge = (status: BackendWorkItemStatus) => {
     switch (status) {
-      case "in_progress":
+      case "IN_PROGRESS":
         return (
           <Badge
             variant="outline"
@@ -229,7 +215,7 @@ export function WorkQueue({
             In Progress
           </Badge>
         )
-      case "review_needed":
+      case "REVIEW_NEEDED":
         return (
           <Badge
             variant="outline"
@@ -239,16 +225,16 @@ export function WorkQueue({
             Review Needed
           </Badge>
         )
-      case "todo":
+      case "OPEN":
         return (
           <Badge
             variant="outline"
             className="border-zinc-700 bg-zinc-800/40 text-zinc-400 font-normal text-[11px]"
           >
-            To Do
+            Open / To Do
           </Badge>
         )
-      case "completed":
+      case "COMPLETED":
         return (
           <Badge
             variant="outline"
@@ -258,39 +244,59 @@ export function WorkQueue({
             Completed
           </Badge>
         )
+      case "BLOCKED":
+        return (
+          <Badge
+            variant="outline"
+            className="border-rose-500/30 bg-rose-500/10 text-rose-300 font-normal text-[11px]"
+          >
+            <Lock className="mr-1 size-3 text-rose-400" />
+            Blocked
+          </Badge>
+        )
     }
   }
 
-  const getPriorityIndicator = (priority: WorkItemPriority) => {
+  const getPriorityIndicator = (priority: BackendWorkItemPriority) => {
     switch (priority) {
-      case "urgent":
+      case "URGENT":
         return (
           <div className="flex items-center gap-1.5 text-xs text-rose-400 font-medium">
             <span className="size-1.5 rounded-full bg-rose-500 animate-pulse" />
             Urgent
           </div>
         )
-      case "high":
+      case "HIGH":
         return (
           <div className="flex items-center gap-1.5 text-xs text-amber-400">
             <span className="size-1.5 rounded-full bg-amber-500" />
             High
           </div>
         )
-      case "medium":
+      case "MEDIUM":
         return (
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
             <span className="size-1.5 rounded-full bg-zinc-500" />
             Medium
           </div>
         )
-      case "low":
+      case "LOW":
         return (
           <div className="flex items-center gap-1.5 text-xs text-zinc-500">
             <span className="size-1.5 rounded-full bg-zinc-600" />
             Low
           </div>
         )
+    }
+  }
+
+  const formatDueDate = (iso?: string | null) => {
+    if (!iso) return "No due date"
+    try {
+      const d = new Date(iso)
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    } catch {
+      return iso
     }
   }
 
@@ -307,18 +313,20 @@ export function WorkQueue({
               id="work-queue-heading"
               className="text-base font-semibold tracking-tight text-zinc-100"
             >
-              Your Work Queue
+              {activeNav === "my_work" ? "My Assigned Items" : "Live Operations Queue"}
             </h2>
             <span className="rounded-full bg-zinc-800/80 px-2 py-0.5 text-[11px] font-mono text-zinc-400 border border-white/[0.06]">
-              {filteredItems.length} items
+              {totalElements} total
             </span>
           </div>
           <p className="mt-0.5 text-xs text-zinc-400">
-            Sample work items staged for demonstration and queue triage.
+            {isAuthenticated
+              ? "Live backend work items scoped to your authorized teams and role."
+              : "Authentication required to stream operations work queue."}
           </p>
         </div>
 
-        {/* Small Filter Control */}
+        {/* Filters and Search Bar */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 size-3 text-zinc-400" />
@@ -326,8 +334,8 @@ export function WorkQueue({
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Filter queue…"
-              className="h-7 w-36 rounded-lg border border-white/[0.08] bg-black/40 pl-7 pr-6 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 sm:w-44"
+              placeholder="Search tracking, title…"
+              className="h-7 w-36 rounded-lg border border-white/[0.08] bg-black/40 pl-7 pr-6 text-xs text-zinc-200 placeholder:text-zinc-500 focus:border-indigo-500/50 focus:outline-none focus:ring-1 focus:ring-indigo-500/30 sm:w-48"
             />
             {searchQuery && (
               <button
@@ -344,69 +352,151 @@ export function WorkQueue({
           <div className="inline-flex items-center rounded-lg border border-white/[0.08] bg-black/40 p-1">
             <button
               type="button"
-              onClick={() => setActiveFilter("all")}
+              onClick={() => {
+                setActiveFilter("all")
+                setPage(0)
+              }}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                 activeFilter === "all"
                   ? "bg-zinc-800 text-zinc-100 shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               )}
             >
-              All ({counts.all})
+              All
             </button>
             <button
               type="button"
-              onClick={() => setActiveFilter("high_priority")}
+              onClick={() => {
+                setActiveFilter("high_priority")
+                setPage(0)
+              }}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                 activeFilter === "high_priority"
                   ? "bg-zinc-800 text-zinc-100 shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               )}
             >
-              High Priority ({counts.high_priority})
+              High Priority
             </button>
             <button
               type="button"
-              onClick={() => setActiveFilter("in_progress")}
+              onClick={() => {
+                setActiveFilter("in_progress")
+                setPage(0)
+              }}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                 activeFilter === "in_progress"
                   ? "bg-zinc-800 text-zinc-100 shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               )}
             >
-              In Progress ({counts.in_progress})
+              In Progress
             </button>
             <button
               type="button"
-              onClick={() => setActiveFilter("review_needed")}
+              onClick={() => {
+                setActiveFilter("review_needed")
+                setPage(0)
+              }}
               className={cn(
-                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors",
+                "rounded-md px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer",
                 activeFilter === "review_needed"
                   ? "bg-zinc-800 text-zinc-100 shadow-sm"
                   : "text-zinc-400 hover:text-zinc-200"
               )}
             >
-              Review Needed ({counts.review_needed})
+              Review Needed
             </button>
           </div>
         </div>
       </div>
 
-      {/* Queue Table / Rows */}
-      {filteredItems.length > 0 ? (
+      {/* Error Banner */}
+      {error && (
+        <div className="mt-3 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="size-4 shrink-0 text-rose-400" />
+            <span>{error}</span>
+          </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={loadQueue}
+            className="text-xs text-rose-300 hover:text-rose-100 hover:bg-rose-500/20 gap-1 h-7 px-2"
+          >
+            <RotateCw className="size-3" /> Retry
+          </Button>
+        </div>
+      )}
+
+      {/* Loading Skeletons */}
+      {isLoading ? (
+        <div className="mt-4 space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className="flex items-center justify-between p-3 rounded-lg border border-white/[0.04] bg-white/[0.01] animate-pulse"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-4 w-16 bg-zinc-800 rounded" />
+                <div className="h-4 w-48 sm:w-72 bg-zinc-800 rounded" />
+              </div>
+              <div className="flex items-center gap-4">
+                <div className="h-4 w-14 bg-zinc-800 rounded hidden sm:block" />
+                <div className="h-4 w-20 bg-zinc-800 rounded" />
+                <div className="h-6 w-6 rounded-full bg-zinc-800" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : !isAuthenticated ? (
+        /* Unauthenticated State */
+        <div className="flex flex-col items-center justify-center py-14 px-4 text-center">
+          <div className="flex size-12 items-center justify-center rounded-xl border border-indigo-500/30 bg-indigo-500/10 text-indigo-400">
+            <Lock className="size-5" />
+          </div>
+          <h3 className="mt-3 text-sm font-semibold text-zinc-100">
+            Sign In to View Work Queue
+          </h3>
+          <p className="mt-1 text-xs text-zinc-400 max-w-sm">
+            Work items are protected by team boundaries and JWT authentication. Sign in with an operations account to inspect live items.
+          </p>
+          <Button
+            size="sm"
+            onClick={() => setShowLoginModal(true)}
+            className="mt-4 bg-indigo-600 hover:bg-indigo-500 text-white text-xs px-4 cursor-pointer"
+          >
+            Open Sign In Dialog
+          </Button>
+        </div>
+      ) : items.length > 0 ? (
+        /* Queue Table / Rows */
         <div className="mt-3 divide-y divide-white/[0.04] overflow-x-auto">
-          {filteredItems.map((item) => (
+          {items.map((item) => (
             <div
               key={item.id}
-              className="group flex flex-col gap-3 py-3 px-2 sm:flex-row sm:items-center sm:justify-between rounded-lg transition-colors hover:bg-white/[0.02]"
+              onClick={() => openItemDetails(item.id)}
+              className="group flex flex-col gap-3 py-3 px-2 sm:flex-row sm:items-center sm:justify-between rounded-lg transition-colors hover:bg-white/[0.03] cursor-pointer"
             >
               {/* Left Details */}
               <div className="flex items-start gap-3 min-w-0">
-                <span className="shrink-0 font-mono text-xs font-semibold text-indigo-400/90 pt-0.5">
-                  {item.id}
-                </span>
+                <button
+                  type="button"
+                  onClick={(e) => handleCopyId(e, item.trackingNumber)}
+                  className="shrink-0 font-mono text-xs font-semibold text-indigo-400/90 pt-0.5 hover:text-indigo-300 transition-colors"
+                  title="Click to copy tracking number"
+                >
+                  {copiedId === item.trackingNumber ? (
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <Check className="size-3" /> Copied
+                    </span>
+                  ) : (
+                    item.trackingNumber
+                  )}
+                </button>
 
                 <div className="space-y-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -416,12 +506,19 @@ export function WorkQueue({
                     <span className="rounded bg-zinc-800/60 px-1.5 py-0.5 text-[10px] uppercase font-mono tracking-wider text-zinc-400 border border-white/[0.04]">
                       {item.type}
                     </span>
+                    {item.team && (
+                      <span className="rounded bg-indigo-950/40 text-indigo-300/80 px-1.5 py-0.2 text-[10px] font-medium border border-indigo-500/20">
+                        {item.team.name}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-3 text-xs text-zinc-400 flex-wrap">
                     <span>{item.systemArea}</span>
                     <span className="text-zinc-700">•</span>
-                    <span>Due: {item.dueDate}</span>
+                    <span>Due: {formatDueDate(item.dueDate)}</span>
+                    <span className="text-zinc-700">•</span>
+                    <span className="font-mono text-[10px] text-zinc-500">v{item.version}</span>
                   </div>
                 </div>
               </div>
@@ -432,25 +529,46 @@ export function WorkQueue({
 
                 <div className="w-28 shrink-0">{getStatusBadge(item.status)}</div>
 
-                <div className="flex items-center gap-2 w-28 shrink-0">
-                  <Avatar size="sm" className="size-6 border border-white/[0.1]">
-                    <AvatarFallback className="bg-zinc-800 text-[10px] text-zinc-300 font-medium">
-                      {item.assignedTo.initials}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-xs text-zinc-400 truncate">
-                    {item.assignedTo.name.split(" ")[0]}
-                  </span>
+                {/* Assignee / Claim Button */}
+                <div className="w-32 shrink-0">
+                  {item.assignee ? (
+                    <div className="flex items-center gap-2">
+                      <Avatar size="sm" className="size-6 border border-white/[0.1]">
+                        <AvatarFallback className="bg-zinc-800 text-[10px] text-zinc-300 font-medium">
+                          {item.assignee.avatarInitials ||
+                            item.assignee.name.slice(0, 2).toUpperCase()}
+                        </AvatarFallback>
+                      </Avatar>
+                      <span className="text-xs text-zinc-400 truncate">
+                        {item.assignee.name.split(" ")[0]}
+                      </span>
+                    </div>
+                  ) : (
+                    <Button
+                      size="icon-xs"
+                      disabled={claimingId === item.id}
+                      onClick={(e) => handleClaim(e, item)}
+                      className="h-6 px-2 text-[11px] bg-indigo-600/80 hover:bg-indigo-600 text-white gap-1 cursor-pointer"
+                    >
+                      {claimingId === item.id ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <UserCheck className="size-3" />
+                      )}
+                      Claim
+                    </Button>
+                  )}
                 </div>
 
-                {/* Meaningful Row Action Dropdown Menu */}
+                {/* Actions Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
                       size="icon-xs"
+                      onClick={(e) => e.stopPropagation()}
                       className="text-zinc-500 hover:text-zinc-300 focus-visible:ring-1 focus-visible:ring-indigo-500/50"
-                      aria-label={`Actions for ${item.id}`}
+                      aria-label={`Actions for ${item.trackingNumber}`}
                     >
                       <MoreHorizontal className="size-3.5" />
                     </Button>
@@ -460,47 +578,32 @@ export function WorkQueue({
                     className="w-48 border-white/[0.08] bg-[#141418] text-zinc-200 shadow-xl"
                   >
                     <DropdownMenuLabel className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                      {item.id} Actions
+                      {item.trackingNumber} Actions
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator className="bg-white/[0.06]" />
                     <DropdownMenuItem
-                      onClick={() => handleCopyId(item.id)}
+                      onClick={(e) => handleCopyId(e, item.trackingNumber)}
                       className="text-xs cursor-pointer hover:bg-white/[0.05]"
                     >
-                      {copiedId === item.id ? (
-                        <>
-                          <Check className="mr-2 size-3.5 text-emerald-400" />
-                          <span>Copied ID</span>
-                        </>
-                      ) : (
-                        <>
-                          <Copy className="mr-2 size-3.5 text-zinc-400" />
-                          <span>Copy Item ID</span>
-                        </>
-                      )}
+                      <Copy className="mr-2 size-3.5 text-zinc-400" />
+                      <span>Copy Tracking #</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => handleAssignToMe(item.id)}
+                      onClick={() => openItemDetails(item.id)}
                       className="text-xs cursor-pointer hover:bg-white/[0.05]"
                     >
-                      <UserCheck className="mr-2 size-3.5 text-zinc-400" />
-                      <span>
-                        {item.assignedTo.name === "Alex Morgan"
-                          ? "Unassign from Me"
-                          : "Assign to Me"}
-                      </span>
+                      <ArrowRight className="mr-2 size-3.5 text-indigo-400" />
+                      <span>View Details & Audit</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => handleToggleStatus(item.id)}
-                      className="text-xs cursor-pointer hover:bg-white/[0.05]"
-                    >
-                      <CheckCircle2 className="mr-2 size-3.5 text-zinc-400" />
-                      <span>
-                        {item.status === "completed"
-                          ? "Reopen Item"
-                          : "Mark as Completed"}
-                      </span>
-                    </DropdownMenuItem>
+                    {!item.assignee && (
+                      <DropdownMenuItem
+                        onClick={(e) => handleClaim(e, item)}
+                        className="text-xs cursor-pointer hover:bg-white/[0.05] text-indigo-300"
+                      >
+                        <UserCheck className="mr-2 size-3.5" />
+                        <span>Claim to Myself</span>
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
@@ -518,8 +621,8 @@ export function WorkQueue({
           </h3>
           <p className="mt-1 text-xs text-zinc-400 max-w-sm">
             {searchQuery
-              ? `No items match "${searchQuery}" under ${activeFilter.replace("_", " ")} filter.`
-              : `There are no work items matching the active filter (${activeFilter.replace("_", " ")}).`}
+              ? `No items match "${searchQuery}" under the active filter.`
+              : `There are currently no work items under the active filter.`}
           </p>
           <Button
             variant="outline"
@@ -527,29 +630,45 @@ export function WorkQueue({
             onClick={() => {
               setActiveFilter("all")
               setSearchQuery("")
+              setPage(0)
             }}
-            className="mt-4 border-white/[0.08] bg-zinc-900 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white"
+            className="mt-4 border-white/[0.08] bg-zinc-900 text-xs text-zinc-300 hover:bg-zinc-800 hover:text-white cursor-pointer"
           >
             Reset all filters
           </Button>
         </div>
       )}
 
-      {/* Footer queue note */}
-      <div className="mt-4 flex items-center justify-between border-t border-white/[0.04] pt-3 text-[11px] text-zinc-400">
-        <span>Illustrative sample dataset · Interactive queue triage</span>
-        <button
-          type="button"
-          onClick={() => {
-            setActiveFilter("all")
-            setSearchQuery("")
-          }}
-          className="text-indigo-400 hover:text-indigo-300 transition-colors inline-flex items-center gap-1"
-        >
-          View all items
-          <ArrowUpRight className="size-3" />
-        </button>
-      </div>
+      {/* Pagination Footer */}
+      {isAuthenticated && totalElements > 0 && (
+        <div className="mt-4 flex items-center justify-between border-t border-white/[0.04] pt-3 text-xs text-zinc-400">
+          <span>
+            Page {page + 1} of {totalPages} ({totalElements} items total)
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon-xs"
+              disabled={page <= 0 || isLoading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+              className="size-7 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30"
+              aria-label="Previous page"
+            >
+              <ChevronLeft className="size-3.5" />
+            </Button>
+            <Button
+              variant="outline"
+              size="icon-xs"
+              disabled={page >= totalPages - 1 || isLoading}
+              onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+              className="size-7 border-white/[0.08] bg-white/[0.02] text-zinc-300 disabled:opacity-30"
+              aria-label="Next page"
+            >
+              <ChevronRight className="size-3.5" />
+            </Button>
+          </div>
+        </div>
+      )}
     </section>
   )
 }

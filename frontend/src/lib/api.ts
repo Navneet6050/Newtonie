@@ -124,6 +124,26 @@ export function setAuthToken(token: string | null): void {
   }
 }
 
+export interface BackendWorkItemMetrics {
+  openCount: number
+  inProgressCount: number
+  reviewNeededCount: number
+  completedCount: number
+  blockedCount: number
+  urgentCount: number
+  blockedOrUrgentCount: number
+  totalCount: number
+}
+
+function handleAuthError(res: Response) {
+  if (res.status === 401) {
+    setAuthToken(null)
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("newtonite:unauthorized"))
+    }
+  }
+}
+
 function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
   const headers: Record<string, string> = { ...extraHeaders }
   const token = getAuthToken()
@@ -157,19 +177,31 @@ export async function getCurrentUser(): Promise<AuthUser> {
   })
 
   if (!res.ok) {
-    if (res.status === 401) {
-      setAuthToken(null)
-    }
+    handleAuthError(res)
     throw new Error(`Failed to get current user: ${res.status}`)
   }
 
   return res.json()
 }
 
+export async function fetchWorkItemMetrics(teamId?: string): Promise<BackendWorkItemMetrics> {
+  const query = teamId ? `?teamId=${encodeURIComponent(teamId)}` : ""
+  const res = await fetch(`${API_BASE}/work-items/metrics${query}`, {
+    headers: getAuthHeaders(),
+    cache: "no-store",
+  })
+  if (!res.ok) {
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch work item metrics: ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function fetchWorkItems(params?: {
   search?: string
   status?: BackendWorkItemStatus
-  priority?: BackendWorkItemPriority
+  priority?: BackendWorkItemPriority | string | string[]
   type?: BackendWorkItemType
   teamId?: string
   assigneeId?: string
@@ -181,7 +213,13 @@ export async function fetchWorkItems(params?: {
   const query = new URLSearchParams()
   if (params?.search) query.set("search", params.search)
   if (params?.status) query.set("status", params.status)
-  if (params?.priority) query.set("priority", params.priority)
+  if (params?.priority) {
+    if (Array.isArray(params.priority)) {
+      query.set("priority", params.priority.join(","))
+    } else {
+      query.set("priority", params.priority)
+    }
+  }
   if (params?.type) query.set("type", params.type)
   if (params?.teamId) query.set("teamId", params.teamId)
   if (params?.assigneeId) query.set("assigneeId", params.assigneeId)
@@ -195,7 +233,9 @@ export async function fetchWorkItems(params?: {
     cache: "no-store",
   })
   if (!res.ok) {
-    throw new Error(`Failed to fetch work items: ${res.status} ${res.statusText}`)
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch work items: ${res.status} ${res.statusText}`)
   }
   return res.json()
 }
@@ -206,7 +246,9 @@ export async function getWorkItem(id: string): Promise<BackendWorkItem> {
     cache: "no-store",
   })
   if (!res.ok) {
-    throw new Error(`Failed to fetch work item ${id}: ${res.status} ${res.statusText}`)
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch work item ${id}: ${res.status} ${res.statusText}`)
   }
   return res.json()
 }
@@ -228,6 +270,7 @@ export async function createWorkItem(
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
+    handleAuthError(res)
     const errorBody = await res.json().catch(() => null)
     throw new Error(errorBody?.message || `Failed to create work item: ${res.status}`)
   }
@@ -252,6 +295,7 @@ export async function updateWorkItem(
     body: JSON.stringify(payload),
   })
   if (!res.ok) {
+    handleAuthError(res)
     const errorBody = await res.json().catch(() => null)
     throw new Error(errorBody?.message || `Failed to update work item ${id}: ${res.status}`)
   }
@@ -264,6 +308,7 @@ export async function claimWorkItem(id: string): Promise<BackendWorkItem> {
     headers: getAuthHeaders(),
   })
   if (!res.ok) {
+    handleAuthError(res)
     const errorBody = await res.json().catch(() => null)
     throw new Error(errorBody?.message || `Failed to claim work item ${id}: ${res.status}`)
   }
@@ -280,7 +325,9 @@ export async function fetchActivityHistory(
     cache: "no-store",
   })
   if (!res.ok) {
-    throw new Error(`Failed to fetch activity logs for ${id}: ${res.status}`)
+    handleAuthError(res)
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Failed to fetch activity logs for ${id}: ${res.status}`)
   }
   return res.json()
 }

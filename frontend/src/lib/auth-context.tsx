@@ -62,8 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       })
 
+    const handleUnauthorized = () => {
+      setUser(null)
+      setShowLoginModal(true)
+    }
+    window.addEventListener("newtonite:unauthorized", handleUnauthorized)
+
     return () => {
       ignore = true
+      window.removeEventListener("newtonite:unauthorized", handleUnauthorized)
     }
   }, [])
 
