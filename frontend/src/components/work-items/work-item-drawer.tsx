@@ -76,6 +76,58 @@ export function WorkItemDrawer({
     }
   }, [])
 
+  const prevActiveElement = React.useRef<HTMLElement | null>(null)
+  const closeButtonRef = React.useRef<HTMLButtonElement | null>(null)
+
+  // Track and restore keyboard focus
+  React.useEffect(() => {
+    if (isOpen) {
+      prevActiveElement.current = document.activeElement as HTMLElement | null
+      const timer = setTimeout(() => {
+        closeButtonRef.current?.focus()
+      }, 50)
+      return () => clearTimeout(timer)
+    } else if (prevActiveElement.current) {
+      if (typeof prevActiveElement.current.focus === "function" && prevActiveElement.current.isConnected) {
+        prevActiveElement.current.focus()
+      }
+      prevActiveElement.current = null
+    }
+  }, [isOpen])
+
+  // Dismiss drawer on Escape key
+  React.useEffect(() => {
+    if (!isOpen) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose()
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [isOpen, onClose])
+
+  const [prevItemId, setPrevItemId] = React.useState(itemId)
+  const [prevIsOpen, setPrevIsOpen] = React.useState(isOpen)
+
+  if (itemId !== prevItemId || isOpen !== prevIsOpen) {
+    setPrevItemId(itemId)
+    setPrevIsOpen(isOpen)
+    if (!isOpen || !itemId) {
+      setItem(null)
+      setError(null)
+      setActivityLogs([])
+      setComments([])
+      setIsLoading(false)
+    } else {
+      setItem(null)
+      setError(null)
+      setActivityLogs([])
+      setComments([])
+      setIsLoading(true)
+    }
+  }
+
   React.useEffect(() => {
     if (!isOpen || !itemId) {
       return
@@ -257,7 +309,7 @@ export function WorkItemDrawer({
     <div className="fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="drawer-item-title">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity duration-200"
+        className="fixed inset-0 bg-black/70 backdrop-blur-xs transition-opacity duration-200 animate-in fade-in motion-reduce:animate-none"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -265,13 +317,17 @@ export function WorkItemDrawer({
       <div className="fixed inset-y-0 right-0 flex max-w-full pl-10">
         <aside
           aria-label="Work Item Details"
-          className="w-screen max-w-lg surface-overlay text-zinc-100 shadow-2xl flex flex-col"
+          className="w-screen max-w-lg surface-overlay text-zinc-100 shadow-2xl flex flex-col animate-in slide-in-from-right duration-200 ease-out motion-reduce:animate-none"
         >
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/[0.06] p-4 bg-zinc-950/40">
             <div className="flex items-center gap-2.5">
               <span className="font-mono text-sm font-bold text-indigo-400">
-                {item?.trackingNumber || "Loading..."}
+                {isLoading && !item ? (
+                  <span className="inline-block h-4 w-20 rounded bg-white/[0.08] animate-pulse motion-reduce:animate-none align-middle" />
+                ) : (
+                  item?.trackingNumber || "Work Item"
+                )}
               </span>
               {item && (
                 <>
@@ -290,7 +346,7 @@ export function WorkItemDrawer({
                 <button
                   type="button"
                   onClick={handleCopyTrackingNumber}
-                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+                  className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors cursor-pointer"
                   aria-label="Copy tracking number"
                   title="Copy tracking number"
                 >
@@ -298,9 +354,10 @@ export function WorkItemDrawer({
                 </button>
               )}
               <button
+                ref={closeButtonRef}
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200"
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors cursor-pointer"
                 aria-label="Close details"
               >
                 <X className="size-4" />
@@ -315,11 +372,59 @@ export function WorkItemDrawer({
           )}
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center py-20 text-zinc-400 gap-2">
-                <Loader2 className="size-6 animate-spin text-indigo-400" />
-                <span className="text-xs">Loading work item details...</span>
+          <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-6">
+            {isLoading && !item ? (
+              <div className="space-y-6 animate-pulse motion-reduce:animate-none">
+                {/* Title & Description Skeleton */}
+                <div className="space-y-2">
+                  <div className="h-6 w-3/4 rounded bg-white/[0.08]" />
+                  <div className="space-y-1.5 pt-1">
+                    <div className="h-3.5 w-full rounded bg-white/[0.04]" />
+                    <div className="h-3.5 w-5/6 rounded bg-white/[0.04]" />
+                    <div className="h-3.5 w-2/3 rounded bg-white/[0.04]" />
+                  </div>
+                </div>
+
+                {/* Status Workflow Box Skeleton */}
+                <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-3.5 w-24 rounded bg-white/[0.06]" />
+                    <div className="h-3.5 w-28 rounded bg-white/[0.04]" />
+                  </div>
+                  <div className="flex gap-2">
+                    <div className="h-7 w-28 rounded bg-white/[0.06]" />
+                    <div className="h-7 w-28 rounded bg-white/[0.04]" />
+                  </div>
+                </div>
+
+                {/* Metadata Grid Skeleton */}
+                <div className="grid grid-cols-2 gap-2.5">
+                  {[1, 2, 3, 4].map((i) => (
+                    <div key={i} className="rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 space-y-1.5">
+                      <div className="h-3 w-16 rounded bg-white/[0.04]" />
+                      <div className="h-4 w-24 rounded bg-white/[0.06]" />
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tabs & Items Skeleton */}
+                <div className="space-y-3 pt-2">
+                  <div className="flex gap-4 border-b border-white/[0.06] pb-2">
+                    <div className="h-4 w-20 rounded bg-white/[0.06]" />
+                    <div className="h-4 w-20 rounded bg-white/[0.04]" />
+                  </div>
+                  <div className="space-y-2.5">
+                    {[1, 2].map((i) => (
+                      <div key={i} className="flex gap-2.5 p-2 rounded-lg bg-white/[0.015]">
+                        <div className="size-6 rounded-full bg-white/[0.06] shrink-0" />
+                        <div className="space-y-1.5 flex-1">
+                          <div className="h-3.5 w-32 rounded bg-white/[0.06]" />
+                          <div className="h-3 w-full rounded bg-white/[0.03]" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               </div>
             ) : error ? (
               <div className="flex items-start gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
@@ -654,7 +759,25 @@ export function WorkItemDrawer({
                   )}
                 </div>
               </>
-            ) : null}
+            ) : (
+              <div className="flex flex-col items-center justify-center py-16 text-center space-y-3">
+                <div className="flex size-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02] text-zinc-400">
+                  <AlertCircle className="size-5 text-zinc-400" />
+                </div>
+                <h3 className="text-sm font-medium text-zinc-200">Work Item Not Found</h3>
+                <p className="text-xs text-zinc-400 max-w-xs">
+                  This work item could not be retrieved, or you do not have permission to access it.
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onClose}
+                  className="mt-2 text-xs h-7 px-3 border-white/[0.08] hover:bg-white/[0.05]"
+                >
+                  Close Drawer
+                </Button>
+              </div>
+            )}
           </div>
         </aside>
       </div>

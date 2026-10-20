@@ -168,7 +168,7 @@ function DashboardContent() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard
             title="Open Work Items"
-            value={isLoadingMetrics ? "…" : metrics?.openCount ?? 0}
+            value={isLoadingMetrics && !metrics ? "…" : metrics?.openCount ?? 0}
             contextLabel={
               metrics
                 ? `${metrics.openCount} items awaiting intake`
@@ -176,10 +176,11 @@ function DashboardContent() {
             }
             icon={Layers}
             statusVariant="info"
+            isLoading={isLoadingMetrics && !metrics}
           />
           <MetricCard
             title="In Progress"
-            value={isLoadingMetrics ? "…" : metrics?.inProgressCount ?? 0}
+            value={isLoadingMetrics && !metrics ? "…" : metrics?.inProgressCount ?? 0}
             contextLabel={
               metrics
                 ? `${metrics.reviewNeededCount} awaiting review`
@@ -187,10 +188,11 @@ function DashboardContent() {
             }
             icon={Clock}
             statusVariant="default"
+            isLoading={isLoadingMetrics && !metrics}
           />
           <MetricCard
             title="Completed"
-            value={isLoadingMetrics ? "…" : metrics?.completedCount ?? 0}
+            value={isLoadingMetrics && !metrics ? "…" : metrics?.completedCount ?? 0}
             contextLabel={
               metrics
                 ? `${Math.round((metrics.completedCount / Math.max(1, metrics.totalCount)) * 100)}% resolution rate`
@@ -198,10 +200,11 @@ function DashboardContent() {
             }
             icon={CheckCircle2}
             statusVariant="success"
+            isLoading={isLoadingMetrics && !metrics}
           />
           <MetricCard
             title="Blocked & Urgent"
-            value={isLoadingMetrics ? "…" : metrics?.blockedOrUrgentCount ?? 0}
+            value={isLoadingMetrics && !metrics ? "…" : metrics?.blockedOrUrgentCount ?? 0}
             contextLabel={
               metrics
                 ? `${metrics.blockedCount} blocked · ${metrics.urgentCount} urgent`
@@ -209,6 +212,7 @@ function DashboardContent() {
             }
             icon={AlertTriangle}
             statusVariant="warning"
+            isLoading={isLoadingMetrics && !metrics}
           />
         </div>
       </section>

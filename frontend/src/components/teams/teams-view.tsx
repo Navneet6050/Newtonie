@@ -191,13 +191,13 @@ export function TeamsView() {
         </div>
       )}
 
-      {/* Loading Skeleton */}
-      {isLoading && (
+      {/* Loading Skeleton on Initial Load */}
+      {isLoading && teams.length === 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {[1, 2].map((n) => (
             <div
               key={n}
-              className="rounded-xl border border-white/[0.08] bg-[#111114]/90 p-5 space-y-4 animate-pulse"
+              className="rounded-xl border border-white/[0.08] bg-[#111114]/90 p-5 space-y-4 animate-pulse motion-reduce:animate-none"
             >
               <div className="flex items-start justify-between">
                 <div className="space-y-2">

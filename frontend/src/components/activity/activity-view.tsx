@@ -48,6 +48,17 @@ export function ActivityView() {
 
   const activeTeamFilter = userTeamFilter !== null ? userTeamFilter : selectedTeamId
 
+  const [prevActiveTeamFilter, setPrevActiveTeamFilter] = React.useState(activeTeamFilter)
+  const [prevPage, setPrevPage] = React.useState(page)
+  const [prevRefreshKey, setPrevRefreshKey] = React.useState(refreshKey)
+
+  if (activeTeamFilter !== prevActiveTeamFilter || page !== prevPage || refreshKey !== prevRefreshKey) {
+    setPrevActiveTeamFilter(activeTeamFilter)
+    setPrevPage(page)
+    setPrevRefreshKey(refreshKey)
+    setIsLoading(true)
+  }
+
   // Load available teams for the filter selector
   React.useEffect(() => {
     let isMounted = true
@@ -296,11 +307,11 @@ export function ActivityView() {
         </div>
       )}
 
-      {/* Loading Skeleton */}
-      {isLoading && (
+      {/* Loading Skeleton on Initial Load */}
+      {isLoading && (!feed || feed.content.length === 0) && (
         <div className="rounded-xl border border-white/[0.08] bg-[#111114]/90 divide-y divide-white/[0.04]">
           {[1, 2, 3, 4, 5].map((n) => (
-            <div key={n} className="p-4 space-y-2 animate-pulse">
+            <div key={n} className="p-4 space-y-2 animate-pulse motion-reduce:animate-none">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="size-6 rounded-full bg-white/[0.06]" />
@@ -343,8 +354,11 @@ export function ActivityView() {
       )}
 
       {/* Activity Timeline List */}
-      {!isLoading && !error && feed && feed.content.length > 0 && (
-        <div className="rounded-xl border border-white/[0.08] bg-[#111114]/90 overflow-hidden divide-y divide-white/[0.04]">
+      {feed && feed.content.length > 0 && (
+        <div className={cn("rounded-xl border border-white/[0.08] bg-[#111114]/90 overflow-hidden divide-y divide-white/[0.04] transition-opacity duration-150", isLoading && "opacity-60 pointer-events-none")}>
+          {isLoading && (
+            <div className="h-0.5 bg-indigo-500/60 animate-pulse motion-reduce:animate-none" />
+          )}
           {feed.content.map((log) => {
             const badge = getActionBadge(log.actionType)
             const BadgeIcon = badge.icon

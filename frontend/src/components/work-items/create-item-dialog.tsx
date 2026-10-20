@@ -42,8 +42,21 @@ export function CreateItemDialog({
   )
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
+  const prevActiveElement = React.useRef<HTMLElement | null>(null)
 
-  const handleClose = React.useCallback(() => {
+  // Track and restore keyboard focus
+  React.useEffect(() => {
+    if (isOpen) {
+      prevActiveElement.current = document.activeElement as HTMLElement | null
+    } else if (prevActiveElement.current) {
+      if (typeof prevActiveElement.current.focus === "function" && prevActiveElement.current.isConnected) {
+        prevActiveElement.current.focus()
+      }
+      prevActiveElement.current = null
+    }
+  }, [isOpen])
+
+  const resetForm = React.useCallback(() => {
     setTitle("")
     setDescription("")
     setUserChosenTeamId(null)
@@ -53,11 +66,17 @@ export function CreateItemDialog({
         ? crypto.randomUUID()
         : `item-${Date.now()}`
     )
+  }, [])
+
+  const handleDismiss = React.useCallback(() => {
+    if (isSubmitting) return
+    resetForm()
     onClose()
-  }, [onClose])
+  }, [onClose, isSubmitting, resetForm])
 
   const handleSubmit = React.useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    if (isSubmitting) return
     if (!title.trim()) {
       setError("Title is required (minimum 3 characters).")
       return
@@ -89,8 +108,9 @@ export function CreateItemDialog({
         idempotencyKey
       )
 
+      resetForm()
       onSuccess()
-      handleClose()
+      onClose()
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message)
@@ -100,35 +120,43 @@ export function CreateItemDialog({
     } finally {
       setIsSubmitting(false)
     }
-  }, [title, description, teamId, dueDate, type, priority, systemArea, idempotencyKey, onSuccess, handleClose])
+  }, [title, description, teamId, dueDate, type, priority, systemArea, idempotencyKey, onSuccess, onClose, resetForm, isSubmitting])
 
-  // Add Cmd+Enter / Ctrl+Enter shortcut to create item
+  // Add Cmd+Enter / Ctrl+Enter shortcut to create item and guard Escape during submission
   React.useEffect(() => {
     if (!isOpen) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
         e.preventDefault()
+        if (isSubmitting) return
         const fakeEvent = { preventDefault: () => {} } as React.FormEvent
         handleSubmit(fakeEvent)
       } else if (e.key === "Escape") {
-        handleClose()
+        if (!isSubmitting) {
+          handleDismiss()
+        }
       }
     }
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, handleSubmit, handleClose])
+  }, [isOpen, handleSubmit, handleDismiss, isSubmitting])
 
   if (!isOpen) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-in fade-in duration-150 motion-reduce:animate-none"
       role="dialog"
       aria-modal="true"
       aria-labelledby="create-item-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) {
+          handleDismiss()
+        }
+      }}
     >
-      <div className="relative w-full max-w-xl rounded-xl border border-white/[0.08] bg-[#0f1014] p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto">
+      <div className="relative w-full max-w-xl rounded-xl border border-white/[0.08] bg-[#0f1014] p-6 shadow-2xl text-zinc-100 max-h-[90vh] overflow-y-auto animate-in fade-in zoom-in-95 duration-150 motion-reduce:animate-none">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/[0.06] pb-3.5">
           <div className="flex items-center gap-2">
@@ -142,8 +170,9 @@ export function CreateItemDialog({
 
           <button
             type="button"
-            onClick={handleClose}
-            className="rounded p-1 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors cursor-pointer"
+            disabled={isSubmitting}
+            onClick={handleDismiss}
+            className="rounded p-1 text-zinc-500 hover:bg-white/[0.06] hover:text-zinc-200 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label="Close dialog"
           >
             <X className="size-4" />
@@ -315,7 +344,7 @@ export function CreateItemDialog({
                 variant="ghost"
                 size="sm"
                 disabled={isSubmitting}
-                onClick={handleClose}
+                onClick={handleDismiss}
                 className="text-xs text-zinc-400 hover:text-zinc-200 h-8 px-3 cursor-pointer"
               >
                 Cancel

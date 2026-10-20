@@ -10,6 +10,7 @@ export interface MetricCardProps {
   contextLabel: string
   icon: LucideIcon
   statusVariant?: "default" | "warning" | "success" | "info"
+  isLoading?: boolean
 }
 
 export function MetricCard({
@@ -18,6 +19,7 @@ export function MetricCard({
   contextLabel,
   icon: Icon,
   statusVariant = "default",
+  isLoading = false,
 }: MetricCardProps) {
   const variantStyles = {
     default: {
@@ -38,10 +40,12 @@ export function MetricCard({
     },
   }[statusVariant]
 
+  const isPlaceholder = isLoading && (value === "…" || value === "" || value === undefined)
+
   return (
     <SpotlightCard
       role="region"
-      aria-label={`${title}: ${value}. ${contextLabel}`}
+      aria-label={`${title}: ${isPlaceholder ? "Loading" : value}. ${contextLabel}`}
       className="group relative flex flex-col justify-between rounded-lg border border-white/[0.06] bg-[#0c0d10] p-3 transition-colors hover:border-white/[0.12] hover:bg-[#0f1013]"
     >
       <div className="flex items-center justify-between gap-2">
@@ -53,7 +57,11 @@ export function MetricCard({
 
       <div className="mt-2 flex items-baseline justify-between gap-2">
         <span className="text-xl font-bold tracking-tight text-zinc-100 tabular-nums">
-          <CountUp value={value} />
+          {isPlaceholder ? (
+            <span className="inline-block h-6 w-10 rounded bg-white/[0.07] animate-pulse motion-reduce:animate-none align-middle" />
+          ) : (
+            <CountUp value={value} />
+          )}
         </span>
         <span className="text-[11px] text-zinc-400 truncate">
           {contextLabel}

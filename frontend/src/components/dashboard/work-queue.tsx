@@ -148,7 +148,7 @@ export function WorkQueue() {
     if (items.length > 0) queueIntroPlayed = true
   }, [items.length])
 
-  const [isLoading, setIsLoading] = React.useState(false)
+  const [isLoading, setIsLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [claimingId, setClaimingId] = React.useState<string | null>(null)
   const [copiedId, setCopiedId] = React.useState<string | null>(null)
@@ -163,16 +163,38 @@ export function WorkQueue() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Reset pagination when switching teams, navigation tabs, or status filters
+  // Track filter/search/page transitions and reset pagination/loading state
   const [prevTeamId, setPrevTeamId] = React.useState(selectedTeamId)
   const [prevActiveNav, setPrevActiveNav] = React.useState(activeNav)
   const [prevFilter, setPrevFilter] = React.useState(activeFilter)
+  const [prevPage, setPrevPage] = React.useState(page)
+  const [prevDateFilter, setPrevDateFilter] = React.useState(dateFilter)
+  const [prevCustomRange, setPrevCustomRange] = React.useState(customRange)
+  const [prevDebouncedSearch, setPrevDebouncedSearch] = React.useState(debouncedSearch)
+  const [prevRefreshKey, setPrevRefreshKey] = React.useState(refreshKey)
 
-  if (selectedTeamId !== prevTeamId || activeNav !== prevActiveNav || activeFilter !== prevFilter) {
+  if (
+    selectedTeamId !== prevTeamId ||
+    activeNav !== prevActiveNav ||
+    activeFilter !== prevFilter ||
+    page !== prevPage ||
+    dateFilter !== prevDateFilter ||
+    customRange !== prevCustomRange ||
+    debouncedSearch !== prevDebouncedSearch ||
+    refreshKey !== prevRefreshKey
+  ) {
+    if (selectedTeamId !== prevTeamId || activeNav !== prevActiveNav || activeFilter !== prevFilter) {
+      setPage(0)
+    }
     setPrevTeamId(selectedTeamId)
     setPrevActiveNav(activeNav)
     setPrevFilter(activeFilter)
-    setPage(0)
+    setPrevPage(page)
+    setPrevDateFilter(dateFilter)
+    setPrevCustomRange(customRange)
+    setPrevDebouncedSearch(debouncedSearch)
+    setPrevRefreshKey(refreshKey)
+    setIsLoading(true)
   }
 
   const loadQueue = React.useCallback(() => {
@@ -836,24 +858,24 @@ export function WorkQueue() {
         )}
 
         {/* Table Content */}
-        {isLoading ? (
+        {isLoading && items.length === 0 ? (
           <div className="divide-y divide-white/[0.03]">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div
                 key={i}
-                className="flex items-center justify-between px-3.5 py-3 animate-pulse"
+                className="flex items-center justify-between px-3.5 py-3 animate-pulse motion-reduce:animate-none"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-3.5 w-14 bg-zinc-800 rounded" />
+                  <div className="h-3.5 w-14 bg-zinc-800/80 rounded" />
                   <div className="space-y-1.5">
-                    <div className="h-3.5 w-48 sm:w-80 bg-zinc-800 rounded" />
-                    <div className="h-2.5 w-32 bg-zinc-800/60 rounded" />
+                    <div className="h-3.5 w-48 sm:w-80 bg-zinc-800/80 rounded" />
+                    <div className="h-2.5 w-32 bg-zinc-800/50 rounded" />
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
-                  <div className="h-3.5 w-16 bg-zinc-800 rounded hidden sm:block" />
-                  <div className="h-3.5 w-20 bg-zinc-800 rounded" />
-                  <div className="h-5 w-5 rounded-full bg-zinc-800" />
+                  <div className="h-3.5 w-16 bg-zinc-800/80 rounded hidden sm:block" />
+                  <div className="h-3.5 w-20 bg-zinc-800/80 rounded" />
+                  <div className="h-5 w-5 rounded-full bg-zinc-800/80" />
                 </div>
               </div>
             ))}
@@ -878,7 +900,10 @@ export function WorkQueue() {
             </Button>
           </div>
         ) : items.length > 0 ? (
-          <div>
+          <div className={cn("relative transition-opacity duration-150", isLoading && "opacity-60 pointer-events-none")}>
+            {isLoading && (
+              <div className="absolute top-0 inset-x-0 h-0.5 bg-indigo-500/60 animate-pulse motion-reduce:animate-none z-10" />
+            )}
             {/* Desktop Column Header */}
             <div className="hidden sm:grid grid-cols-[88px_1fr_135px_96px_110px_32px] items-center border-b border-white/[0.05] py-2 px-3.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 select-none">
               <span>Issue Key</span>
@@ -898,7 +923,7 @@ export function WorkQueue() {
                   initial={queueIntroPlayed ? false : { opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.28, ease: "easeOut", delay: Math.min(index, 10) * 0.035 }}
-                  className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_96px_110px_32px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.025] transition-colors cursor-pointer select-none gap-2 sm:gap-0"
+                  className="group flex flex-col sm:grid sm:grid-cols-[88px_1fr_135px_96px_110px_32px] items-start sm:items-center py-2.5 px-3.5 hover:bg-white/[0.035] active:bg-white/[0.05] transition-colors duration-150 cursor-pointer select-none gap-2 sm:gap-0"
                 >
                   {/* Issue Key / Tracking Number */}
                   <div className="flex items-center gap-1.5 shrink-0">
