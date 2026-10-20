@@ -6,6 +6,7 @@ import {
   getAuthToken,
   getCurrentUser,
   login as apiLogin,
+  register as apiRegister,
   setAuthToken,
 } from "./api"
 
@@ -14,6 +15,7 @@ interface AuthContextValue {
   isLoading: boolean
   isAuthenticated: boolean
   login: (email: string, password: string, rememberDevice?: boolean) => Promise<void>
+  register: (name: string, email: string, password: string, rememberDevice?: boolean) => Promise<void>
   logout: () => void
   showLoginModal: boolean
   setShowLoginModal: (show: boolean) => void
@@ -85,6 +87,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const register = async (name: string, email: string, password: string, rememberDevice = true) => {
+    setIsLoading(true)
+    try {
+      const resp = await apiRegister(name, email, password, rememberDevice)
+      setUser(resp.user)
+      setShowLoginModal(false)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const logout = () => {
     setAuthToken(null)
     setUser(null)
@@ -97,6 +110,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         isAuthenticated: !!user,
         login,
+        register,
         logout,
         showLoginModal,
         setShowLoginModal,

@@ -9,6 +9,7 @@ import {
   Layers,
   Loader2,
   Mail,
+  User as UserIcon,
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useAuth } from "@/lib/auth-context"
@@ -47,13 +48,18 @@ const SEED_USERS: SeedUser[] = [
 interface AuthCardProps {
   onSuccess?: () => void
   isModal?: boolean
+  initialMode?: "signin" | "register"
 }
 
-export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
-  const { login } = useAuth()
+export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }: AuthCardProps) {
+  const { login, register } = useAuth()
+  const [mode, setMode] = React.useState<"signin" | "register">(initialMode)
+  const [name, setName] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [password, setPassword] = React.useState("")
+  const [confirmPassword, setConfirmPassword] = React.useState("")
   const [showPassword, setShowPassword] = React.useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = React.useState(false)
   const [rememberDevice, setRememberDevice] = React.useState(true)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -61,27 +67,62 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!email.trim() || !password) {
-      setError("Please enter both corporate email and password.")
-      return
-    }
-
     setError(null)
-    setIsSubmitting(true)
 
-    try {
-      await login(email.trim(), password, rememberDevice)
-      if (onSuccess) {
-        onSuccess()
+    if (mode === "register") {
+      if (!name.trim() || name.trim().length < 2) {
+        setError("Please enter your full name (minimum 2 characters).")
+        return
       }
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError("Invalid credentials. Please verify your email and password.")
+      if (!email.trim()) {
+        setError("Please enter your corporate email.")
+        return
       }
-    } finally {
-      setIsSubmitting(false)
+      if (!password || password.length < 8) {
+        setError("Password must be at least 8 characters long.")
+        return
+      }
+      if (password !== confirmPassword) {
+        setError("Passwords do not match. Please verify both fields.")
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        await register(name.trim(), email.trim(), password, rememberDevice)
+        if (onSuccess) {
+          onSuccess()
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("Registration failed. Please try again.")
+        }
+      } finally {
+        setIsSubmitting(false)
+      }
+    } else {
+      if (!email.trim() || !password) {
+        setError("Please enter both corporate email and password.")
+        return
+      }
+
+      setIsSubmitting(true)
+      try {
+        await login(email.trim(), password, rememberDevice)
+        if (onSuccess) {
+          onSuccess()
+        }
+      } catch (err: unknown) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("Invalid credentials. Please verify your email and password.")
+        }
+      } finally {
+        setIsSubmitting(false)
+      }
     }
   }
 
@@ -90,6 +131,12 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
     setPassword("NewtoniteDev2026!")
     setActiveSeedEmail(seed.email)
     setError(null)
+  }
+
+  const toggleMode = (newMode: "signin" | "register") => {
+    setMode(newMode)
+    setError(null)
+    setActiveSeedEmail(null)
   }
 
   return (
@@ -113,10 +160,12 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
           id={isModal ? "login-dialog-title" : undefined}
           className="mt-4 text-center text-2xl font-semibold tracking-tight text-white"
         >
-          Sign in
+          {mode === "signin" ? "Sign in" : "Create account"}
         </h1>
         <p className="mt-1.5 text-center text-sm text-white/50">
-          Use your corporate account to continue.
+          {mode === "signin"
+            ? "Use your corporate account to continue."
+            : "Register your operator profile for Newtonite."}
         </p>
       </div>
 
@@ -134,8 +183,31 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
         </div>
       )}
 
-      {/* Credentials Form */}
+      {/* Form */}
       <form onSubmit={handleSubmit} className="mt-7 space-y-4">
+        {/* Full Name Field (Register Mode Only) */}
+        {mode === "register" && (
+          <div className="space-y-1.5 animate-in fade-in duration-150">
+            <label htmlFor="auth-name" className="text-xs font-medium text-white/60 block">
+              Full Name
+            </label>
+            <div className="relative">
+              <UserIcon className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/35" />
+              <Input
+                id="auth-name"
+                type="text"
+                required
+                autoComplete="name"
+                disabled={isSubmitting}
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Alex Morgan"
+                className="h-11 rounded-lg border border-white/10 bg-white/[0.04] pl-10 text-sm text-white placeholder:text-white/30 transition focus-visible:border-indigo-400/60 focus-visible:ring-2 focus-visible:ring-indigo-500/25"
+              />
+            </div>
+          </div>
+        )}
+
         {/* Email Field */}
         <div className="space-y-1.5">
           <label htmlFor="auth-email" className="text-xs font-medium text-white/60 block">
@@ -162,16 +234,21 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
 
         {/* Password Field */}
         <div className="space-y-1.5">
-          <label htmlFor="auth-password" className="text-xs font-medium text-white/60 block">
-            Password
-          </label>
+          <div className="flex items-center justify-between">
+            <label htmlFor="auth-password" className="text-xs font-medium text-white/60 block">
+              Password
+            </label>
+            {mode === "register" && (
+              <span className="text-[10px] text-white/40">Min. 8 characters</span>
+            )}
+          </div>
           <div className="relative">
             <KeyRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/35" />
             <Input
               id="auth-password"
               type={showPassword ? "text" : "password"}
               required
-              autoComplete="current-password"
+              autoComplete={mode === "register" ? "new-password" : "current-password"}
               disabled={isSubmitting}
               value={password}
               onChange={(e) => {
@@ -191,6 +268,37 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
             </button>
           </div>
         </div>
+
+        {/* Confirm Password Field (Register Mode Only) */}
+        {mode === "register" && (
+          <div className="space-y-1.5 animate-in fade-in duration-150">
+            <label htmlFor="auth-confirm-password" className="text-xs font-medium text-white/60 block">
+              Confirm Password
+            </label>
+            <div className="relative">
+              <KeyRound className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 size-4 text-white/35" />
+              <Input
+                id="auth-confirm-password"
+                type={showConfirmPassword ? "text" : "password"}
+                required
+                autoComplete="new-password"
+                disabled={isSubmitting}
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="••••••••••••"
+                className="h-11 rounded-lg border border-white/10 bg-white/[0.04] pl-10 pr-10 text-sm text-white placeholder:text-white/30 transition focus-visible:border-indigo-400/60 focus-visible:ring-2 focus-visible:ring-indigo-500/25"
+              />
+              <button
+                type="button"
+                onClick={() => setShowConfirmPassword((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70 transition-colors p-1"
+                aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
+              >
+                {showConfirmPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Remember Session Option */}
         <div className="flex items-center justify-between pt-0.5">
@@ -215,20 +323,47 @@ export function AuthCard({ onSuccess, isModal = false }: AuthCardProps) {
             {isSubmitting ? (
               <span className="flex items-center gap-2">
                 <Loader2 className="size-4 animate-spin" />
-                <span>Verifying…</span>
+                <span>{mode === "register" ? "Creating profile…" : "Verifying…"}</span>
               </span>
             ) : (
-              <span>Sign In to Console</span>
+              <span>{mode === "register" ? "Create Account & Sign In" : "Sign In to Console"}</span>
             )}
           </Button>
         </motion.div>
       </form>
 
-      {/* Demo Accounts (rendered only in non-production) */}
-      {process.env.NODE_ENV !== "production" && (
+      {/* Switch between Sign In and Register Mode */}
+      <div className="mt-5 text-center text-xs text-white/50">
+        {mode === "signin" ? (
+          <span>
+            Don&apos;t have an account?{" "}
+            <button
+              type="button"
+              onClick={() => toggleMode("register")}
+              className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer transition-colors"
+            >
+              Create account
+            </button>
+          </span>
+        ) : (
+          <span>
+            Already have an account?{" "}
+            <button
+              type="button"
+              onClick={() => toggleMode("signin")}
+              className="font-medium text-indigo-400 hover:text-indigo-300 hover:underline cursor-pointer transition-colors"
+            >
+              Sign in
+            </button>
+          </span>
+        )}
+      </div>
+
+      {/* Demo Accounts (rendered only in non-production during sign-in) */}
+      {mode === "signin" && process.env.NODE_ENV !== "production" && (
         <div className="mt-6 border-t border-white/[0.06] pt-5">
           <div className="text-[11px] uppercase tracking-wider text-white/35">
-            Demo accounts
+            Demo accounts (Dev only)
           </div>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {SEED_USERS.map((seed, i) => {

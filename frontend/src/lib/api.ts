@@ -217,6 +217,28 @@ export async function login(
   return data
 }
 
+export async function register(
+  name: string,
+  email: string,
+  password: string,
+  rememberDevice = true
+): Promise<LoginResponse> {
+  const res = await fetch(`${API_BASE}/auth/register`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, email, password }),
+  })
+
+  if (!res.ok) {
+    const errorBody = await res.json().catch(() => null)
+    throw new Error(errorBody?.message || `Registration failed: ${res.status}`)
+  }
+
+  const data: LoginResponse = await res.json()
+  setAuthToken(data.token, rememberDevice)
+  return data
+}
+
 export async function getCurrentUser(): Promise<AuthUser> {
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: getAuthHeaders(),

@@ -9,6 +9,8 @@ import com.newtonite.team.TeamMembership;
 import com.newtonite.team.TeamMembershipRepository;
 import com.newtonite.team.User;
 import com.newtonite.team.UserRepository;
+import com.newtonite.security.dto.RegisterRequest;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +24,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -32,18 +35,21 @@ public class AuthController {
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final CurrentUserProvider currentUserProvider;
+    private final RegistrationRateLimiter registrationRateLimiter;
 
     public AuthController(
             UserRepository userRepository,
             TeamMembershipRepository teamMembershipRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
-            CurrentUserProvider currentUserProvider) {
+            CurrentUserProvider currentUserProvider,
+            RegistrationRateLimiter registrationRateLimiter) {
         this.userRepository = userRepository;
         this.teamMembershipRepository = teamMembershipRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.currentUserProvider = currentUserProvider;
+        this.registrationRateLimiter = registrationRateLimiter;
     }
 
     @PostMapping("/login")
@@ -67,11 +73,73 @@ public class AuthController {
         return ResponseEntity.ok(new LoginResponse(token, "Bearer", userResponse));
     }
 
+    @PostMapping("/register")
+    public ResponseEntity<LoginResponse> register(
+            @Valid @RequestBody RegisterRequest request,
+            HttpServletRequest servletRequest) {
+
+        String clientIp = getClientIp(servletRequest);
+        registrationRateLimiter.checkRateLimit(clientIp);
+
+        String cleanEmail = request.email().trim().toLowerCase();
+        if (userRepository.findByEmail(cleanEmail).isPresent()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "An account with this email already exists");
+        }
+
+        String trimmedName = request.name().trim();
+        if (trimmedName.length() < 2) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Name must be at least 2 characters long");
+        }
+
+        String initials = computeInitials(trimmedName);
+        String passwordHash = passwordEncoder.encode(request.password());
+
+        // Strictly assign least-privileged "USER" system role server-side.
+        // Never accept elevated permissions or roles from registration requests.
+        User newUser = new User(
+                UUID.randomUUID(),
+                cleanEmail,
+                trimmedName,
+                initials,
+                "USER",
+                passwordHash,
+                true
+        );
+        userRepository.save(newUser);
+
+        String token = jwtService.generateToken(newUser);
+        AuthUserResponse userResponse = toAuthUserResponse(newUser);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(new LoginResponse(token, "Bearer", userResponse));
+    }
+
     @GetMapping("/me")
     public ResponseEntity<AuthUserResponse> getCurrentUser() {
         User user = currentUserProvider.getCurrentUser();
         AuthUserResponse response = toAuthUserResponse(user);
         return ResponseEntity.ok(response);
+    }
+
+    private String getClientIp(HttpServletRequest request) {
+        if (request == null) return "unknown";
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        return request.getRemoteAddr() != null ? request.getRemoteAddr() : "unknown";
+    }
+
+    private String computeInitials(String name) {
+        if (name == null || name.isBlank()) {
+            return "OP";
+        }
+        String[] parts = name.trim().split("\\s+");
+        if (parts.length >= 2) {
+            String first = parts[0].substring(0, 1).toUpperCase();
+            String last = parts[parts.length - 1].substring(0, 1).toUpperCase();
+            return first + last;
+        }
+        return name.substring(0, Math.min(2, name.length())).toUpperCase();
     }
 
     private AuthUserResponse toAuthUserResponse(User user) {

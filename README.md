@@ -266,7 +266,32 @@ Status changes must follow explicit operations transitions:
 - In Flyway migration `V3`, `idempotency_records` uses a composite primary key `(user_id, key)`.
 - Cached responses and collision detection are scoped by composite key `(user_id, key)`, ensuring replay requests are isolated to the originating operator.
 
-### 5. Local Development Accounts (Development-Only)
+### 5. Admin Demo Account (Assignment Evaluation Mode)
+For assignment reviewers evaluating administrator functionality without relying on hardcoded migration credentials:
+- **Email**: `admin@newtonie.com`
+- **Evaluation Password**: `admin123` (configured via server-side environment variable `SECURITY_ADMIN_BOOTSTRAP_PASSWORD`)
+- **System Role**: `ADMIN` (Global access across all workspace queues and activity feeds)
+- **Primary Workspace**: `Acme Studio` (`TEAM_LEAD`)
+
+> [!WARNING]
+> The demo password `admin123` is weak and intended strictly for controlled evaluation environments. The bootstrap mechanism is disabled by default and requires explicit server-side enablement:
+> - **Enablement**: Set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=true` and `SECURITY_ADMIN_BOOTSTRAP_PASSWORD=admin123` on Render / backend.
+> - **Idempotency**: The bootstrap runs on application startup. If the account already exists, it preserves existing credentials and data without recreating rows.
+> - **De-provisioning**: Set `SECURITY_ADMIN_BOOTSTRAP_ENABLED=false` or remove the environment variable to disable provisioning in production.
+
+### 6. Dedicated User Registration & Safe Onboarding
+Newtonite provides a self-service registration flow accessible via `/register` or the "Create account" toggle on the sign-in card:
+- **Endpoint**: `POST /api/auth/register` (publicly accessible, rate-limited at 10 req/min per IP to prevent abuse)
+- **Parameters**: `name` (min 2 chars), `email` (normalized to lowercase), `password` (min 8 chars)
+- **Security Guarantees**:
+  - Always assigns the least-privileged `USER` system role server-side. Public registration cannot create administrator accounts or accept arbitrary team IDs.
+  - Rejects duplicate emails with `409 Conflict`.
+  - Passwords are encrypted with BCrypt (10 rounds).
+- **Safe Workspace Onboarding**:
+  - Newly registered users are created without default team memberships, ensuring zero exposure to existing private team items, discussions, or audit logs.
+  - The dashboard displays an onboarding notice directing operators to request team assignment from the workspace administrator (`admin@newtonie.com`).
+
+### 7. Local Development Accounts (Development-Only)
 The following pre-seeded test accounts are provided strictly for local environment verification. All local development accounts use the development-only password:
 **`NewtoniteDev2026!`** (hashed with BCrypt in Flyway migration `V3`). *These credentials must never be deployed to staging or production environments.*:
 
@@ -277,6 +302,7 @@ The following pre-seeded test accounts are provided strictly for local environme
 | **Marcus Bell** | `marcus.bell@acme.internal` | `USER` | Acme Studio | `MEMBER` |
 | **Elena Rostova** | `elena.rostova@acme.internal` | `USER` | Acme Studio | `MEMBER` |
 | **Liam Vance** | `liam.vance@acme.internal` | `USER` | Acme Platform | `TEAM_LEAD` |
+
 
 ---
 

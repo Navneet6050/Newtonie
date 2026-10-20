@@ -35,6 +35,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.newtonite.security.AdminBootstrapRunner;
+import com.newtonite.security.RegistrationRateLimiter;
+import com.newtonite.security.dto.RegisterRequest;
+import com.newtonite.team.TeamMembershipRepository;
+import com.newtonite.team.TeamRepository;
+import com.newtonite.team.UserRepository;
+import org.springframework.security.crypto.password.PasswordEncoder;
+
 @SpringBootTest
 @AutoConfigureMockMvc
 public class SecurityAuthTests {
@@ -50,6 +58,21 @@ public class SecurityAuthTests {
 
     @Autowired
     private JwtService jwtService;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private TeamRepository teamRepository;
+
+    @Autowired
+    private TeamMembershipRepository teamMembershipRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
+    @Autowired
+    private RegistrationRateLimiter registrationRateLimiter;
 
     private static final UUID TEAM_ACME_STUDIO_ID = UUID.fromString("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
     private static final UUID TEAM_ACME_PLATFORM_ID = UUID.fromString("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
@@ -616,5 +639,203 @@ public class SecurityAuthTests {
             // Distinct items across pages
             assertThat(item1Id).isNotEqualTo(item0Id);
         }
+    }
+
+    @Test
+    @DisplayName("16. Registration succeeds, normalizes email, hashes password with BCrypt, and issues valid token")
+    void testRegistrationSuccess() throws Exception {
+        registrationRateLimiter.reset();
+        String uniqueEmail = "reg.test." + UUID.randomUUID() + "@acme.internal";
+        RegisterRequest registerReq = new RegisterRequest("New Operator", uniqueEmail.toUpperCase(), "SecurePass2026!");
+
+        MvcResult result = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(registerReq)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.type").value("Bearer"))
+                .andExpect(jsonPath("$.user.email").value(uniqueEmail.toLowerCase()))
+                .andExpect(jsonPath("$.user.name").value("New Operator"))
+                .andExpect(jsonPath("$.user.avatarInitials").value("NO"))
+                .andExpect(jsonPath("$.user.systemRole").value("USER"))
+                .andExpect(jsonPath("$.user.teams").isArray())
+                .andExpect(jsonPath("$.user.teams").isEmpty())
+                .andReturn();
+
+        String token = objectMapper.readTree(result.getResponse().getContentAsString()).get("token").asText();
+        assertThat(jwtService.validateToken(token)).isTrue();
+
+        // Verify password in database is BCrypt hashed (not plaintext)
+        User savedUser = userRepository.findByEmail(uniqueEmail.toLowerCase()).orElseThrow();
+        assertThat(savedUser.getPasswordHash()).startsWith("$2a$");
+        assertThat(passwordEncoder.matches("SecurePass2026!", savedUser.getPasswordHash())).isTrue();
+
+        // Verify newly registered user can subsequently log in with their normalized email and password
+        LoginRequest loginReq = new LoginRequest(uniqueEmail.toLowerCase(), "SecurePass2026!");
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.token").isString())
+                .andExpect(jsonPath("$.user.email").value(uniqueEmail.toLowerCase()));
+    }
+
+    @Test
+    @DisplayName("17. Registration rejects duplicate email with 409 Conflict")
+    void testRegistrationDuplicateEmail() throws Exception {
+        registrationRateLimiter.reset();
+        // alex.morgan@acme.internal already exists from V1 seed
+        RegisterRequest dupReq = new RegisterRequest("Alex Impostor", "alex.morgan@acme.internal", "Password123!");
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(dupReq)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value(containsString("already exists")));
+    }
+
+    @Test
+    @DisplayName("18. Registration rejects invalid input fields with 400 Bad Request")
+    void testRegistrationValidation() throws Exception {
+        registrationRateLimiter.reset();
+        // 1. Invalid email format
+        RegisterRequest badEmail = new RegisterRequest("Valid Name", "not-an-email", "ValidPass123!");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(badEmail)))
+                .andExpect(status().isBadRequest());
+
+        // 2. Short password (< 8 chars)
+        RegisterRequest shortPass = new RegisterRequest("Valid Name", "valid@acme.internal", "short");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(shortPass)))
+                .andExpect(status().isBadRequest());
+
+        // 3. Blank name
+        RegisterRequest blankName = new RegisterRequest("  ", "valid@acme.internal", "ValidPass123!");
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(blankName)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("19. Registration strictly assigns USER role and ignores injected privileges")
+    void testRegistrationIgnoresInjectedAdminPrivileges() throws Exception {
+        registrationRateLimiter.reset();
+        String uniqueEmail = "priv.test." + UUID.randomUUID() + "@acme.internal";
+        String payloadWithInjectedPrivileges = """
+            {
+                "name": "Attacker",
+                "email": "%s",
+                "password": "Password1234!",
+                "systemRole": "ADMIN",
+                "role": "ADMIN",
+                "admin": true,
+                "teamId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+            }
+            """.formatted(uniqueEmail);
+
+        mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(payloadWithInjectedPrivileges))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.user.systemRole").value("USER"))
+                .andExpect(jsonPath("$.user.teams").isEmpty());
+
+        User userInDb = userRepository.findByEmail(uniqueEmail).orElseThrow();
+        assertThat(userInDb.getSystemRole()).isEqualTo("USER");
+    }
+
+    @Test
+    @DisplayName("20. Registration rate limiter protects against request floods with 429 Too Many Requests")
+    void testRegistrationRateLimiterAbuseProtection() throws Exception {
+        registrationRateLimiter.reset();
+        String clientIp = "192.168.1.100";
+        String emailPrefix = "flood." + UUID.randomUUID() + ".";
+
+        // Perform requests up to limit (10)
+        for (int i = 0; i < 10; i++) {
+            RegisterRequest req = new RegisterRequest("Operator " + i, emailPrefix + i + "@acme.internal", "FloodPass123!");
+            mockMvc.perform(post("/api/auth/register")
+                            .with(request -> {
+                                request.setRemoteAddr(clientIp);
+                                return request;
+                            })
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isCreated());
+        }
+
+        // The 11th request from the same IP must be rejected with 429 Too Many Requests
+        RegisterRequest req11 = new RegisterRequest("Operator 11", emailPrefix + "11@acme.internal", "FloodPass123!");
+        mockMvc.perform(post("/api/auth/register")
+                        .with(request -> {
+                            request.setRemoteAddr(clientIp);
+                            return request;
+                        })
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req11)))
+                .andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.message").value(containsString("Too many registration attempts")));
+
+        registrationRateLimiter.reset();
+    }
+
+    @Test
+    @DisplayName("21. Admin demo bootstrap provisions admin@newtonie.com with ADMIN role idempotently")
+    void testAdminDemoBootstrap() throws Exception {
+        String adminEmail = "admin@newtonie.com";
+        String adminPassword = "admin123";
+
+        // Clean up if already present from previous run
+        userRepository.findByEmail(adminEmail).ifPresent(u -> {
+            teamMembershipRepository.deleteAll(teamMembershipRepository.findByUserId(u.getId()));
+            userRepository.delete(u);
+        });
+
+        AdminBootstrapRunner runner = new AdminBootstrapRunner(
+                userRepository,
+                teamRepository,
+                teamMembershipRepository,
+                passwordEncoder,
+                true,
+                adminEmail,
+                adminPassword
+        );
+
+        // First run: provisions admin
+        runner.run(null);
+
+        User adminUser = userRepository.findByEmail(adminEmail).orElseThrow();
+        assertThat(adminUser.getSystemRole()).isEqualTo("ADMIN");
+        assertThat(passwordEncoder.matches(adminPassword, adminUser.getPasswordHash())).isTrue();
+
+        // Verify admin has membership in Acme Studio
+        assertThat(teamMembershipRepository.findByUserId(adminUser.getId())).isNotEmpty();
+
+        // Verify admin can authenticate via /api/auth/login and receives ADMIN token
+        LoginRequest loginReq = new LoginRequest(adminEmail, adminPassword);
+        MvcResult loginResult = mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.user.email").value(adminEmail))
+                .andExpect(jsonPath("$.user.systemRole").value("ADMIN"))
+                .andReturn();
+
+        String adminToken = objectMapper.readTree(loginResult.getResponse().getContentAsString()).get("token").asText();
+        assertThat(jwtService.validateToken(adminToken)).isTrue();
+
+        // Verify admin has global workspace access (can list items across teams)
+        mockMvc.perform(get("/api/work-items")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        // Second run: idempotent (does not alter or reset user)
+        runner.run(null);
+        User stillSame = userRepository.findByEmail(adminEmail).orElseThrow();
+        assertThat(stillSame.getId()).isEqualTo(adminUser.getId());
     }
 }

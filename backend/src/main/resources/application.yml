@@ -48,4 +48,11 @@ security:
   jwt:
     secret: ${JWT_SECRET:newtonite-insecure-development-jwt-secret-key-32bytes-long-for-hmac-sha256}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
-
+  admin-bootstrap:
+    enabled: ${SECURITY_ADMIN_BOOTSTRAP_ENABLED:false}
+    email: ${SECURITY_ADMIN_BOOTSTRAP_EMAIL:admin@newtonie.com}
+    password: ${SECURITY_ADMIN_BOOTSTRAP_PASSWORD:}
+  registration:
+    rate-limit:
+      max-requests: ${SECURITY_REGISTRATION_RATE_LIMIT_MAX:10}
+      window-seconds: ${SECURITY_REGISTRATION_RATE_LIMIT_WINDOW:60}
