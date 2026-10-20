@@ -13,6 +13,8 @@ import com.newtonite.team.TeamMembershipRepository;
 import com.newtonite.team.TeamRepository;
 import com.newtonite.team.User;
 import com.newtonite.team.UserRepository;
+import com.newtonite.workitem.dto.CommentResponse;
+import com.newtonite.workitem.dto.CreateCommentRequest;
 import com.newtonite.workitem.dto.CreateWorkItemRequest;
 import com.newtonite.workitem.dto.PagedResponse;
 import com.newtonite.workitem.dto.UpdateWorkItemRequest;
@@ -41,6 +43,7 @@ public class WorkItemService {
     private final ActivityLogService activityLogService;
     private final IdempotencyService idempotencyService;
     private final CurrentUserProvider currentUserProvider;
+    private final CommentRepository commentRepository;
 
     public WorkItemService(
             WorkItemRepository workItemRepository,
@@ -49,7 +52,8 @@ public class WorkItemService {
             TeamMembershipRepository teamMembershipRepository,
             ActivityLogService activityLogService,
             IdempotencyService idempotencyService,
-            CurrentUserProvider currentUserProvider) {
+            CurrentUserProvider currentUserProvider,
+            CommentRepository commentRepository) {
         this.workItemRepository = workItemRepository;
         this.teamRepository = teamRepository;
         this.userRepository = userRepository;
@@ -57,6 +61,7 @@ public class WorkItemService {
         this.activityLogService = activityLogService;
         this.idempotencyService = idempotencyService;
         this.currentUserProvider = currentUserProvider;
+        this.commentRepository = commentRepository;
     }
 
     private boolean isAdmin(User user) {
@@ -425,5 +430,57 @@ public class WorkItemService {
 
         WorkItem claimed = workItemRepository.findById(id).orElseThrow();
         return WorkItemResponse.from(claimed);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CommentResponse> getComments(UUID workItemId) {
+        WorkItem item = workItemRepository.findById(workItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Work item not found with ID: " + workItemId));
+
+        User actor = currentUserProvider.getCurrentUser();
+        if (item.getTeam() != null) {
+            checkTeamAccess(item.getTeam().getId(), actor);
+        } else if (!isAdmin(actor)) {
+            throw new AccessDeniedException("Access denied: cannot view comments for item without team access");
+        }
+
+        List<Comment> comments = commentRepository.findByWorkItemIdWithAuthorOrderByCreatedAtAsc(workItemId);
+        return comments.stream().map(CommentResponse::from).toList();
+    }
+
+    @Transactional
+    public CommentResponse addComment(UUID workItemId, CreateCommentRequest request) {
+        WorkItem item = workItemRepository.findById(workItemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Work item not found with ID: " + workItemId));
+
+        User actor = currentUserProvider.getCurrentUser();
+        if (item.getTeam() != null) {
+            checkTeamAccess(item.getTeam().getId(), actor);
+        } else if (!isAdmin(actor)) {
+            throw new AccessDeniedException("Access denied: cannot comment on item without team access");
+        }
+
+        Comment comment = new Comment(
+                UUID.randomUUID(),
+                item,
+                actor,
+                request.content().trim(),
+                Instant.now(),
+                Instant.now()
+        );
+
+        Comment saved = commentRepository.save(comment);
+
+        activityLogService.logActivity(
+                item,
+                actor,
+                "COMMENT_ADDED",
+                "comment",
+                null,
+                null,
+                "Added comment by " + actor.getName()
+        );
+
+        return CommentResponse.from(saved);
     }
 }

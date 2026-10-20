@@ -2,6 +2,8 @@ package com.newtonite.workitem;
 
 import com.newtonite.activity.ActivityLogService;
 import com.newtonite.activity.dto.ActivityLogResponse;
+import com.newtonite.workitem.dto.CommentResponse;
+import com.newtonite.workitem.dto.CreateCommentRequest;
 import com.newtonite.workitem.dto.CreateWorkItemRequest;
 import com.newtonite.workitem.dto.PagedResponse;
 import com.newtonite.workitem.dto.UpdateWorkItemRequest;
@@ -173,6 +175,22 @@ public class WorkItemController {
         PagedResponse<ActivityLogResponse> activityHistory = activityLogService.getActivityHistory(id, pageable);
         return ResponseEntity.ok(activityHistory);
     }
+
+    @GetMapping("/{id}/comments")
+    public ResponseEntity<List<CommentResponse>> getComments(@PathVariable UUID id) {
+        List<CommentResponse> comments = workItemService.getComments(id);
+        return ResponseEntity.ok(comments);
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<CommentResponse> addComment(
+            @PathVariable UUID id,
+            @Valid @RequestBody CreateCommentRequest request) {
+        CommentResponse created = workItemService.addComment(id, request);
+        URI location = URI.create("/api/work-items/" + id + "/comments/" + created.id());
+        return ResponseEntity.created(location).body(created);
+    }
+
 
     private Sort parseSort(String sortParam) {
         if (sortParam == null || sortParam.isBlank()) {
