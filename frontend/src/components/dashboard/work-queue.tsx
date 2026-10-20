@@ -126,9 +126,12 @@ export function WorkQueue() {
     selectedTeamId,
     activeNav,
     openCreateItem,
+    queueFilter,
+    setQueueFilter,
   } = useDashboard()
 
-  const [activeFilter, setActiveFilter] = React.useState<StatusFilterType>("all")
+  const activeFilter = queueFilter ?? "all"
+  const setActiveFilter = setQueueFilter
   const [dateFilter, setDateFilter] = React.useState<DateFilterType>("all")
   const [customRange, setCustomRange] = React.useState<CustomDateRange>({ startDate: "", endDate: "" })
   const [customRangeDraft, setCustomRangeDraft] = React.useState<CustomDateRange>({ startDate: "", endDate: "" })
@@ -160,13 +163,15 @@ export function WorkQueue() {
     return () => clearTimeout(timer)
   }, [searchQuery])
 
-  // Reset pagination when switching teams or navigation tabs
+  // Reset pagination when switching teams, navigation tabs, or status filters
   const [prevTeamId, setPrevTeamId] = React.useState(selectedTeamId)
   const [prevActiveNav, setPrevActiveNav] = React.useState(activeNav)
+  const [prevFilter, setPrevFilter] = React.useState(activeFilter)
 
-  if (selectedTeamId !== prevTeamId || activeNav !== prevActiveNav) {
+  if (selectedTeamId !== prevTeamId || activeNav !== prevActiveNav || activeFilter !== prevFilter) {
     setPrevTeamId(selectedTeamId)
     setPrevActiveNav(activeNav)
+    setPrevFilter(activeFilter)
     setPage(0)
   }
 

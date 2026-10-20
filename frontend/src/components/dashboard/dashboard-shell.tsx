@@ -7,6 +7,8 @@ import { CreateItemDialog } from "@/components/work-items/create-item-dialog"
 import { WorkItemDrawer } from "@/components/work-items/work-item-drawer"
 import { TeamsView } from "@/components/teams/teams-view"
 import { ActivityView } from "@/components/activity/activity-view"
+import { CommandPalette } from "./command-palette"
+import { type StatusFilterType } from "./work-queue"
 import { useAuth } from "@/lib/auth-context"
 
 export interface DashboardContextValue {
@@ -22,6 +24,11 @@ export interface DashboardContextValue {
   openItemDetails: (id: string) => void
   refreshKey: number
   triggerRefresh: () => void
+  queueFilter: StatusFilterType
+  setQueueFilter: (filter: StatusFilterType) => void
+  isCommandPaletteOpen: boolean
+  openCommandPalette: () => void
+  closeCommandPalette: () => void
 }
 
 export const DashboardContext = React.createContext<DashboardContextValue | null>(null)
@@ -56,6 +63,8 @@ export function DashboardShell({ children, initialNav = "overview" }: DashboardS
   const [refreshKey, setRefreshKey] = React.useState(0)
   const [isCreateOpen, setIsCreateOpen] = React.useState(false)
   const [selectedItemId, setSelectedItemId] = React.useState<string | null>(null)
+  const [queueFilter, setQueueFilter] = React.useState<StatusFilterType>("all")
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = React.useState(false)
   const [userSelectedWorkspace, setUserSelectedWorkspace] = React.useState<string | null>(null)
   const [userSelectedTeamId, setUserSelectedTeamId] = React.useState<string | undefined | null>(null)
   const [prevUserId, setPrevUserId] = React.useState<string | undefined>(user?.id)
@@ -102,6 +111,41 @@ export function DashboardShell({ children, initialNav = "overview" }: DashboardS
     setSelectedItemId(id)
   }, [])
 
+  const openCommandPalette = React.useCallback(() => {
+    setIsCommandPaletteOpen(true)
+  }, [])
+
+  const closeCommandPalette = React.useCallback(() => {
+    setIsCommandPaletteOpen(false)
+  }, [])
+
+  // Global Ctrl+K / Cmd+K listener with editable element guard
+  React.useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        const target = e.target as HTMLElement | null
+        if (target) {
+          const isEditable =
+            target.tagName === "INPUT" ||
+            target.tagName === "TEXTAREA" ||
+            target.tagName === "SELECT" ||
+            target.isContentEditable
+
+          // If typing in an input/textarea and NOT inside the command palette itself, do not trigger
+          if (isEditable && !target.closest("[data-command-palette]")) {
+            return
+          }
+        }
+
+        e.preventDefault()
+        setIsCommandPaletteOpen((prev) => !prev)
+      }
+    }
+
+    window.addEventListener("keydown", handleGlobalKeyDown)
+    return () => window.removeEventListener("keydown", handleGlobalKeyDown)
+  }, [])
+
   const navTitles: Record<NavItemKey, string> = {
     overview: "Overview",
     my_work: "My Work",
@@ -123,6 +167,11 @@ export function DashboardShell({ children, initialNav = "overview" }: DashboardS
     openItemDetails,
     refreshKey,
     triggerRefresh,
+    queueFilter,
+    setQueueFilter,
+    isCommandPaletteOpen,
+    openCommandPalette,
+    closeCommandPalette,
   }
 
   return (
@@ -187,6 +236,12 @@ export function DashboardShell({ children, initialNav = "overview" }: DashboardS
           isOpen={!!selectedItemId}
           onClose={() => setSelectedItemId(null)}
           onItemUpdated={triggerRefresh}
+        />
+
+        {/* Global Command Palette */}
+        <CommandPalette
+          isOpen={isCommandPaletteOpen}
+          onClose={closeCommandPalette}
         />
       </div>
     </DashboardContext.Provider>

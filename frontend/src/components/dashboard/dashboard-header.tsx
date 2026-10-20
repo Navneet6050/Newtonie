@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth-context"
+import { useDashboard } from "./dashboard-shell"
 
 interface NotificationItem {
   id: string
@@ -53,8 +54,14 @@ export function DashboardHeader({
   onNewItemClick,
 }: DashboardHeaderProps) {
   const { user, logout, setShowLoginModal, isAuthenticated } = useAuth()
+  const { openCommandPalette } = useDashboard()
   const searchInputRef = React.useRef<HTMLInputElement>(null)
   const [internalSearch, setInternalSearch] = React.useState("")
+  const isMac = React.useSyncExternalStore(
+    () => () => {},
+    () => typeof navigator !== "undefined" && /(Mac|iPhone|iPod|iPad)/i.test(navigator.userAgent),
+    () => false
+  )
   const isSearchControlled = onSearchChange !== undefined
   const currentSearch = isSearchControlled ? searchValue : internalSearch
 
@@ -102,10 +109,7 @@ export function DashboardHeader({
 
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault()
-        searchInputRef.current?.focus()
-      } else if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
+      if (e.key === "Escape" && document.activeElement === searchInputRef.current) {
         handleSearchChange("")
         searchInputRef.current?.blur()
       }
@@ -179,9 +183,15 @@ export function DashboardHeader({
                 <X className="size-2.5" />
               </button>
             )}
-            <kbd className="hidden sm:inline-flex items-center rounded border border-white/[0.08] bg-zinc-900 px-1 py-0.2 font-mono text-[9px] text-zinc-400">
-              ⌘K
-            </kbd>
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="hidden sm:inline-flex items-center rounded border border-white/[0.08] bg-zinc-900 px-1.5 py-0.5 font-mono text-[9px] text-zinc-400 hover:text-zinc-200 hover:border-white/[0.16] hover:bg-zinc-800 transition-colors cursor-pointer"
+              title="Open command palette"
+              aria-label="Open command palette"
+            >
+              {isMac ? "⌘K" : "Ctrl+K"}
+            </button>
           </div>
         </div>
       </div>
