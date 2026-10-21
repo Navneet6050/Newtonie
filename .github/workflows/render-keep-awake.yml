@@ -2,7 +2,9 @@ name: Render Keep-Awake
 
 'on':
   schedule:
-    # Run every 10 minutes to stay within Render's 15-minute inactivity window
+    # Run every 10 minutes to mitigate Render's 15-minute inactivity spin-down.
+    # Note: GitHub Actions schedule triggers operate on a shared best-effort queue
+    # and can experience delays (minutes to hours). Cold starts may still occur.
     - cron: '*/10 * * * *'
   workflow_dispatch: # Allows manual trigger from GitHub Actions console
 
@@ -14,42 +16,93 @@ jobs:
   ping-health:
     name: Ping Health Endpoint
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # Up to 3 attempts * 60s max + delays = ~190s curl runtime; 5 minutes provides a safe bound without premature termination
+    timeout-minutes: 5
 
     steps:
       - name: Ping Newtonite API Health Endpoint
         run: |
           ENDPOINT="https://newtonite-api-g4r3.onrender.com/api/health"
-          echo "Sending keep-awake health ping to: ${ENDPOINT}"
-          echo "Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          MAX_ATTEMPTS=3
+          ATTEMPT_TIMEOUT_SEC=60
+          RETRY_DELAY_SEC=5
 
-          # Execute curl with:
-          # --silent --show-error: clean output while printing errors if failure occurs
-          # --max-time 60: allow up to 60s for response (in case instance is completing cold start)
-          # --retry 2: retry up to 2 times on connection drops
-          # --retry-delay 5: wait 5s between retries
-          # -w: output HTTP status code and response timing
-          CURL_EXIT=0
-          HTTP_RESPONSE=$(curl -s -S -o response.json -w "%{http_code}:%{time_total}s" \
-            --max-time 60 \
-            --retry 2 \
-            --retry-delay 5 \
-            -H "User-Agent: Newtonite-KeepAwake/1.0" \
-            "${ENDPOINT}") || CURL_EXIT=$?
+          echo "========================================================"
+          echo "Newtonite Keep-Awake Health Check"
+          echo "Target Endpoint       : ${ENDPOINT}"
+          echo "Max Attempts          : ${MAX_ATTEMPTS}"
+          echo "Per-Attempt Timeout   : ${ATTEMPT_TIMEOUT_SEC}s"
+          echo "Delay Between Retries : ${RETRY_DELAY_SEC}s"
+          echo "Job Start Timestamp   : $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          echo "========================================================"
 
-          HTTP_CODE=$(echo "${HTTP_RESPONSE}" | cut -d':' -f1)
-          TOTAL_TIME=$(echo "${HTTP_RESPONSE}" | cut -d':' -f2)
+          SUCCESS=false
+          FINAL_CURL_EXIT=1
+          FINAL_HTTP_CODE="000"
 
-          echo "Curl Exit Code: ${CURL_EXIT}"
-          echo "HTTP Status Code: ${HTTP_CODE}"
-          echo "Total Response Time: ${TOTAL_TIME}"
-          echo "Response Body:"
-          cat response.json 2>/dev/null || echo "(no response body)"
+          for attempt in $(seq 1 "${MAX_ATTEMPTS}"); do
+            echo ""
+            echo "--- Attempt ${attempt} of ${MAX_ATTEMPTS} ---"
+            echo "Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+            RESP_FILE="response_attempt_${attempt}.json"
+            METRICS_FILE="metrics_attempt_${attempt}.txt"
+            ERR_FILE="err_attempt_${attempt}.txt"
+            rm -f "${RESP_FILE}" "${METRICS_FILE}" "${ERR_FILE}"
+
+            # Execute a single bounded curl attempt.
+            # Do not use curl's internal --retry flag so that each attempt's
+            # exit code, HTTP status, and duration are captured and logged independently.
+            CURL_EXIT=0
+            set +e
+            curl -s -S -o "${RESP_FILE}" \
+              -w "%{http_code}:%{time_total}s" \
+              --max-time "${ATTEMPT_TIMEOUT_SEC}" \
+              -H "User-Agent: Newtonite-KeepAwake/1.0" \
+              "${ENDPOINT}" > "${METRICS_FILE}" 2> "${ERR_FILE}"
+            CURL_EXIT=$?
+            set -e
+
+            METRICS=$(cat "${METRICS_FILE}" 2>/dev/null || echo "000:0.000000s")
+            HTTP_CODE=$(echo "${METRICS}" | cut -d':' -f1)
+            DURATION=$(echo "${METRICS}" | cut -d':' -f2)
+
+            FINAL_CURL_EXIT="${CURL_EXIT}"
+            FINAL_HTTP_CODE="${HTTP_CODE:-000}"
+
+            echo "Curl Exit Code : ${CURL_EXIT}"
+            echo "HTTP Status    : ${HTTP_CODE:-000}"
+            echo "Response Time  : ${DURATION:-0s}"
+
+            if [ -s "${ERR_FILE}" ]; then
+              echo "Error Output   : $(cat "${ERR_FILE}")"
+            fi
+
+            if [ -s "${RESP_FILE}" ]; then
+              echo "Response Body  : $(cat "${RESP_FILE}")"
+            else
+              echo "Response Body  : (empty response body)"
+            fi
+
+            # Strictly verify that curl exited cleanly (0) and returned HTTP 200
+            if [ "${CURL_EXIT}" -eq 0 ] && [ "${HTTP_CODE}" = "200" ]; then
+              echo "SUCCESS: Attempt ${attempt} received HTTP 200 in ${DURATION}."
+              SUCCESS=true
+              break
+            else
+              echo "Attempt ${attempt} failed (curl_exit=${CURL_EXIT}, http_status=${HTTP_CODE:-000})."
+              if [ "${attempt}" -lt "${MAX_ATTEMPTS}" ]; then
+                echo "Render instance may be waking up from sleep. Waiting ${RETRY_DELAY_SEC}s before retry..."
+                sleep "${RETRY_DELAY_SEC}"
+              fi
+            fi
+          done
+
           echo ""
-
-          if [ "${CURL_EXIT}" -eq 0 ] && [ "${HTTP_CODE}" = "200" ]; then
-            echo "SUCCESS: Newtonite backend is healthy and active (HTTP 200)."
+          echo "========================================================"
+          if [ "${SUCCESS}" = "true" ]; then
+            echo "Keep-awake workflow completed successfully (HTTP 200 received)."
           else
-            echo "::error::Health check failed (curl exit code: ${CURL_EXIT}, HTTP status: ${HTTP_CODE})."
+            echo "::error::Health check failed after ${MAX_ATTEMPTS} attempts. Last exit code: ${FINAL_CURL_EXIT}, last HTTP status: ${FINAL_HTTP_CODE}."
             exit 1
           fi

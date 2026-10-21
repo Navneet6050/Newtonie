@@ -1,0 +1,4 @@
+# Ensure shell scripts and GitHub Actions workflows maintain LF line endings
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
