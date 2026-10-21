@@ -79,7 +79,8 @@ public class AuthController {
         }
 
         String token = jwtService.generateToken(user);
-        AuthUserResponse userResponse = toAuthUserResponse(user);
+        List<TeamMembership> memberships = teamMembershipRepository.findByUserId(user.getId());
+        AuthUserResponse userResponse = toAuthUserResponse(user, memberships);
 
         return ResponseEntity.ok(new LoginResponse(token, "Bearer", userResponse));
     }
@@ -152,7 +153,10 @@ public class AuthController {
     }
 
     private AuthUserResponse toAuthUserResponse(User user) {
-        List<TeamMembership> memberships = teamMembershipRepository.findByUserId(user.getId());
+        return toAuthUserResponse(user, teamMembershipRepository.findByUserId(user.getId()));
+    }
+
+    private AuthUserResponse toAuthUserResponse(User user, List<TeamMembership> memberships) {
         List<TeamMembershipSummary> teamSummaries = memberships.stream()
                 .map(m -> new TeamMembershipSummary(
                         m.getTeam().getId(),

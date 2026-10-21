@@ -25,4 +25,12 @@ class HealthEndpointTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("UP"));
     }
+
+    @Test
+    void apiHealthEndpointReturnsStatusUpWithoutAuth() throws Exception {
+        mockMvc.perform(get("/api/health")
+                .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+    }
 }

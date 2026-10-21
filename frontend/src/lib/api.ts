@@ -196,47 +196,160 @@ function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, s
   return headers
 }
 
+export interface RequestOptions {
+  signal?: AbortSignal
+  timeoutMs?: number
+}
+
+export const DEFAULT_AUTH_TIMEOUT_MS = 50000 // 50 seconds to accommodate Render free-tier cold starts
+
 export async function login(
   email: string,
   password: string,
-  rememberDevice = true
+  rememberDevice = true,
+  options?: RequestOptions
 ): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/login`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  })
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS
+  const controller = new AbortController()
 
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => null)
-    throw new Error(errorBody?.message || `Login failed: ${res.status}`)
+  let externalSignalCleanup: (() => void) | undefined
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      controller.abort(options.signal.reason)
+    } else {
+      const onAbort = () => controller.abort(options.signal?.reason)
+      options.signal.addEventListener("abort", onAbort)
+      externalSignalCleanup = () => options.signal?.removeEventListener("abort", onAbort)
+    }
   }
 
-  const data: LoginResponse = await res.json()
-  setAuthToken(data.token, rememberDevice)
-  return data
+  let timerId: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  if (timeoutMs > 0) {
+    timerId = setTimeout(() => {
+      timedOut = true
+      controller.abort(new Error("REQUEST_TIMEOUT"))
+    }, timeoutMs)
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        throw new Error("Invalid email or password. Please verify your credentials.")
+      }
+      if (res.status === 429) {
+        throw new Error("Too many login attempts. Please wait a moment before trying again.")
+      }
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error("Backend server is currently waking up or unavailable. Please try again in a few moments.")
+      }
+      const errorBody = await res.json().catch(() => null)
+      throw new Error(errorBody?.message || `Login failed: ${res.status}`)
+    }
+
+    const data: LoginResponse = await res.json()
+    setAuthToken(data.token, rememberDevice)
+    return data
+  } catch (err: unknown) {
+    if (timedOut) {
+      throw new Error("Login request timed out while waiting for the server to wake up. Please try signing in again.")
+    }
+    if (err instanceof Error) {
+      if (err.name === "AbortError" && !timedOut) {
+        throw new Error("Login request was cancelled.")
+      }
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        throw new Error("Unable to connect to the backend server. It may still be spinning up from sleep. Please try again.")
+      }
+      throw err
+    }
+    throw new Error("An unexpected error occurred during login. Please try again.")
+  } finally {
+    if (timerId) clearTimeout(timerId)
+    if (externalSignalCleanup) externalSignalCleanup()
+  }
 }
 
 export async function register(
   name: string,
   email: string,
   password: string,
-  rememberDevice = true
+  rememberDevice = true,
+  options?: RequestOptions
 ): Promise<LoginResponse> {
-  const res = await fetch(`${API_BASE}/auth/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, email, password }),
-  })
+  const timeoutMs = options?.timeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS
+  const controller = new AbortController()
 
-  if (!res.ok) {
-    const errorBody = await res.json().catch(() => null)
-    throw new Error(errorBody?.message || `Registration failed: ${res.status}`)
+  let externalSignalCleanup: (() => void) | undefined
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      controller.abort(options.signal.reason)
+    } else {
+      const onAbort = () => controller.abort(options.signal?.reason)
+      options.signal.addEventListener("abort", onAbort)
+      externalSignalCleanup = () => options.signal?.removeEventListener("abort", onAbort)
+    }
   }
 
-  const data: LoginResponse = await res.json()
-  setAuthToken(data.token, rememberDevice)
-  return data
+  let timerId: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  if (timeoutMs > 0) {
+    timerId = setTimeout(() => {
+      timedOut = true
+      controller.abort(new Error("REQUEST_TIMEOUT"))
+    }, timeoutMs)
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email, password }),
+      signal: controller.signal,
+    })
+
+    if (!res.ok) {
+      if (res.status === 409) {
+        throw new Error("An account with this email already exists.")
+      }
+      if (res.status === 429) {
+        throw new Error("Too many registration attempts. Please wait a moment before trying again.")
+      }
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error("Backend server is currently waking up or unavailable. Please try again in a few moments.")
+      }
+      const errorBody = await res.json().catch(() => null)
+      throw new Error(errorBody?.message || `Registration failed: ${res.status}`)
+    }
+
+    const data: LoginResponse = await res.json()
+    setAuthToken(data.token, rememberDevice)
+    return data
+  } catch (err: unknown) {
+    if (timedOut) {
+      throw new Error("Registration request timed out while waiting for the server to wake up. Please try again.")
+    }
+    if (err instanceof Error) {
+      if (err.name === "AbortError" && !timedOut) {
+        throw new Error("Registration request was cancelled.")
+      }
+      if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
+        throw new Error("Unable to connect to the backend server. It may still be spinning up from sleep. Please try again.")
+      }
+      throw err
+    }
+    throw new Error("An unexpected error occurred during registration. Please try again.")
+  } finally {
+    if (timerId) clearTimeout(timerId)
+    if (externalSignalCleanup) externalSignalCleanup()
+  }
 }
 
 export async function getCurrentUser(): Promise<AuthUser> {

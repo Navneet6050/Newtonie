@@ -3,6 +3,7 @@
 import * as React from "react"
 import {
   type AuthUser,
+  type RequestOptions,
   getAuthToken,
   getCurrentUser,
   login as apiLogin,
@@ -14,8 +15,8 @@ interface AuthContextValue {
   user: AuthUser | null
   isLoading: boolean
   isAuthenticated: boolean
-  login: (email: string, password: string, rememberDevice?: boolean) => Promise<void>
-  register: (name: string, email: string, password: string, rememberDevice?: boolean) => Promise<void>
+  login: (email: string, password: string, rememberDevice?: boolean, options?: RequestOptions) => Promise<void>
+  register: (name: string, email: string, password: string, rememberDevice?: boolean, options?: RequestOptions) => Promise<void>
   logout: () => void
   showLoginModal: boolean
   setShowLoginModal: (show: boolean) => void
@@ -76,10 +77,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
-  const login = async (email: string, password: string, rememberDevice = true) => {
+  const login = async (
+    email: string,
+    password: string,
+    rememberDevice = true,
+    options?: RequestOptions
+  ) => {
     setIsLoading(true)
     try {
-      const resp = await apiLogin(email, password, rememberDevice)
+      const resp = await apiLogin(email, password, rememberDevice, options)
       setUser(resp.user)
       setShowLoginModal(false)
     } finally {
@@ -87,10 +93,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const register = async (name: string, email: string, password: string, rememberDevice = true) => {
+  const register = async (
+    name: string,
+    email: string,
+    password: string,
+    rememberDevice = true,
+    options?: RequestOptions
+  ) => {
     setIsLoading(true)
     try {
-      const resp = await apiRegister(name, email, password, rememberDevice)
+      const resp = await apiRegister(name, email, password, rememberDevice, options)
       setUser(resp.user)
       setShowLoginModal(false)
     } finally {

@@ -1,0 +1,55 @@
+name: Render Keep-Awake
+
+'on':
+  schedule:
+    # Run every 10 minutes to stay within Render's 15-minute inactivity window
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions console
+
+concurrency:
+  group: render-keep-awake
+  cancel-in-progress: false
+
+jobs:
+  ping-health:
+    name: Ping Health Endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Ping Newtonite API Health Endpoint
+        run: |
+          ENDPOINT="https://newtonite-api-g4r3.onrender.com/api/health"
+          echo "Sending keep-awake health ping to: ${ENDPOINT}"
+          echo "Timestamp: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          # Execute curl with:
+          # --silent --show-error: clean output while printing errors if failure occurs
+          # --max-time 60: allow up to 60s for response (in case instance is completing cold start)
+          # --retry 2: retry up to 2 times on connection drops
+          # --retry-delay 5: wait 5s between retries
+          # -w: output HTTP status code and response timing
+          CURL_EXIT=0
+          HTTP_RESPONSE=$(curl -s -S -o response.json -w "%{http_code}:%{time_total}s" \
+            --max-time 60 \
+            --retry 2 \
+            --retry-delay 5 \
+            -H "User-Agent: Newtonite-KeepAwake/1.0" \
+            "${ENDPOINT}") || CURL_EXIT=$?
+
+          HTTP_CODE=$(echo "${HTTP_RESPONSE}" | cut -d':' -f1)
+          TOTAL_TIME=$(echo "${HTTP_RESPONSE}" | cut -d':' -f2)
+
+          echo "Curl Exit Code: ${CURL_EXIT}"
+          echo "HTTP Status Code: ${HTTP_CODE}"
+          echo "Total Response Time: ${TOTAL_TIME}"
+          echo "Response Body:"
+          cat response.json 2>/dev/null || echo "(no response body)"
+          echo ""
+
+          if [ "${CURL_EXIT}" -eq 0 ] && [ "${HTTP_CODE}" = "200" ]; then
+            echo "SUCCESS: Newtonite backend is healthy and active (HTTP 200)."
+          else
+            echo "::error::Health check failed (curl exit code: ${CURL_EXIT}, HTTP status: ${HTTP_CODE})."
+            exit 1
+          fi
