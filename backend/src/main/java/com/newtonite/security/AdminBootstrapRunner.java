@@ -23,7 +23,7 @@ import java.util.UUID;
  * 
  * Governed strictly by explicit server-side environment variables:
  * - SECURITY_ADMIN_BOOTSTRAP_ENABLED (default: false)
- * - SECURITY_ADMIN_BOOTSTRAP_EMAIL (default: admin@newtonie.com)
+ * - SECURITY_ADMIN_BOOTSTRAP_EMAIL (default: admin@newtonite.com)
  * - SECURITY_ADMIN_BOOTSTRAP_PASSWORD
  * 
  * Idempotent: Does not recreate accounts or alter existing passwords on subsequent deployments.
@@ -50,7 +50,7 @@ public class AdminBootstrapRunner implements ApplicationRunner {
             TeamMembershipRepository teamMembershipRepository,
             PasswordEncoder passwordEncoder,
             @Value("${security.admin-bootstrap.enabled:false}") boolean enabled,
-            @Value("${security.admin-bootstrap.email:admin@newtonie.com}") String adminEmail,
+            @Value("${security.admin-bootstrap.email:admin@newtonite.com}") String adminEmail,
             @Value("${security.admin-bootstrap.password:}") String adminPassword) {
         this.userRepository = userRepository;
         this.teamRepository = teamRepository;

@@ -157,7 +157,7 @@ function DashboardContent() {
               Workspace Provisioning Incomplete
             </div>
             <p className="text-[11px] text-amber-200/80 leading-relaxed">
-              Your account is active, but your personal workspace has not finished provisioning. Refresh your browser to retry automatic setup, or contact support (<span className="font-mono text-white/90">admin@newtonie.com</span>) if this message persists.
+              Your account is active, but your personal workspace has not finished provisioning. Refresh your browser to retry automatic setup, or contact support (<span className="font-mono text-white/90">admin@newtonite.com</span>) if this message persists.
             </p>
           </div>
         </div>

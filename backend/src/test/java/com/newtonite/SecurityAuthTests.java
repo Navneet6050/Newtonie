@@ -810,9 +810,9 @@ public class SecurityAuthTests {
     }
 
     @Test
-    @DisplayName("21. Admin demo bootstrap provisions admin@newtonie.com with ADMIN role idempotently")
+    @DisplayName("21. Admin demo bootstrap provisions admin@newtonite.com with ADMIN role idempotently")
     void testAdminDemoBootstrap() throws Exception {
-        String adminEmail = "admin@newtonie.com";
+        String adminEmail = "admin@newtonite.com";
         String adminPassword = "admin123";
 
         // Clean up if already present from previous run
