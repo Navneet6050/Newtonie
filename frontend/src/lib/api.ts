@@ -136,7 +136,46 @@ export interface LoginResponse {
   user: AuthUser
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "/api"
+export function normalizeApiBase(rawUrl?: string): string {
+  const trimmed = rawUrl?.trim()
+  if (!trimmed) {
+    return "/api"
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) {
+    try {
+      const parsed = new URL(trimmed)
+      if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+        throw new Error(`Invalid API URL protocol: "${parsed.protocol}". Only http: and https: are supported.`)
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes("Only http: and https: are supported")) {
+        throw err
+      }
+      throw new Error("Invalid API URL: malformed URL provided in configuration. Expected a valid HTTP or HTTPS URL or relative path.")
+    }
+  }
+  const clean = trimmed.replace(/\/+$/, "")
+  return clean.endsWith("/api") ? clean : `${clean}/api`
+}
+
+let initialApiBase = "/api"
+let apiConfigError: string | null = null
+
+try {
+  initialApiBase = normalizeApiBase(process.env.NEXT_PUBLIC_API_URL)
+} catch (err: unknown) {
+  apiConfigError = err instanceof Error ? err.message : "Invalid API URL configuration."
+}
+
+export const API_BASE = initialApiBase
+
+export function getApiConfigurationError(): string | null {
+  return apiConfigError
+}
+
+export function _setApiConfigErrorForTesting(err: string | null): void {
+  apiConfigError = err
+}
 
 let memoryToken: string | null = null
 
@@ -188,6 +227,9 @@ function handleAuthError(res: Response) {
 }
 
 function getAuthHeaders(extraHeaders?: Record<string, string>): Record<string, string> {
+  if (apiConfigError) {
+    throw new Error(`Application configuration error: ${apiConfigError}`)
+  }
   const headers: Record<string, string> = { ...extraHeaders }
   const token = getAuthToken()
   if (token) {
@@ -209,6 +251,9 @@ export async function login(
   rememberDevice = true,
   options?: RequestOptions
 ): Promise<LoginResponse> {
+  if (apiConfigError) {
+    throw new Error(`Application configuration error: ${apiConfigError}`)
+  }
   const timeoutMs = options?.timeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS
   const controller = new AbortController()
 
@@ -259,10 +304,13 @@ export async function login(
     return data
   } catch (err: unknown) {
     if (timedOut) {
-      throw new Error("Login request timed out while waiting for the server to wake up. Please try signing in again.")
+      throw new Error("Login request timed out while waiting for the server to wake up. The backend service may still be starting from sleep; please retry shortly.")
+    }
+    if (options?.signal?.aborted) {
+      throw new Error("Login request was cancelled.")
     }
     if (err instanceof Error) {
-      if (err.name === "AbortError" && !timedOut) {
+      if ((err.name === "AbortError" || err.name === "TimeoutError") && !timedOut) {
         throw new Error("Login request was cancelled.")
       }
       if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
@@ -284,6 +332,9 @@ export async function register(
   rememberDevice = true,
   options?: RequestOptions
 ): Promise<LoginResponse> {
+  if (apiConfigError) {
+    throw new Error(`Application configuration error: ${apiConfigError}`)
+  }
   const timeoutMs = options?.timeoutMs ?? DEFAULT_AUTH_TIMEOUT_MS
   const controller = new AbortController()
 
@@ -334,10 +385,13 @@ export async function register(
     return data
   } catch (err: unknown) {
     if (timedOut) {
-      throw new Error("Registration request timed out while waiting for the server to wake up. Please try again.")
+      throw new Error("Registration request timed out while waiting for the server to wake up. The backend service may still be starting from sleep; please retry shortly.")
+    }
+    if (options?.signal?.aborted) {
+      throw new Error("Registration request was cancelled.")
     }
     if (err instanceof Error) {
-      if (err.name === "AbortError" && !timedOut) {
+      if ((err.name === "AbortError" || err.name === "TimeoutError") && !timedOut) {
         throw new Error("Registration request was cancelled.")
       }
       if (err.message.includes("Failed to fetch") || err.message.includes("NetworkError")) {
@@ -610,14 +664,103 @@ export async function fetchActivityFeed(
   return res.json()
 }
 
-export async function checkBackendHealth(): Promise<boolean> {
+export interface HealthStatusResult {
+  isUp: boolean
+  durationMs: number
+  status: number
+  message: string
+}
+
+export async function checkBackendHealth(options?: RequestOptions): Promise<HealthStatusResult> {
+  if (apiConfigError) {
+    return {
+      isUp: false,
+      durationMs: 0,
+      status: 0,
+      message: `Configuration error: ${apiConfigError}`,
+    }
+  }
+  const timeoutMs = options?.timeoutMs ?? 10000
+  const controller = new AbortController()
+
+  if (options?.signal?.aborted) {
+    return {
+      isUp: false,
+      durationMs: 0,
+      status: 0,
+      message: "Health check was cancelled.",
+    }
+  }
+
+  let externalSignalCleanup: (() => void) | undefined
+  if (options?.signal) {
+    const onAbort = () => controller.abort(options.signal?.reason)
+    options.signal.addEventListener("abort", onAbort)
+    externalSignalCleanup = () => options.signal?.removeEventListener("abort", onAbort)
+  }
+
+  let timerId: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  if (timeoutMs > 0) {
+    timerId = setTimeout(() => {
+      timedOut = true
+      controller.abort(new Error("HEALTH_CHECK_TIMEOUT"))
+    }, timeoutMs)
+  }
+
+  const startTime = Date.now()
   try {
-    const healthUrl = API_BASE.replace(/\/api$/, "/actuator/health")
-    const res = await fetch(healthUrl, { cache: "no-store" })
-    if (!res.ok) return false
-    const data = await res.json()
-    return data.status === "UP"
-  } catch {
-    return false
+    const res = await fetch(`${API_BASE}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      signal: controller.signal,
+    })
+    const durationMs = Date.now() - startTime
+    if (!res.ok) {
+      return {
+        isUp: false,
+        durationMs,
+        status: res.status,
+        message: `Health endpoint returned HTTP ${res.status}.`,
+      }
+    }
+    const data = await res.json().catch(() => null)
+    const isUp = data?.status === "UP"
+    return {
+      isUp,
+      durationMs,
+      status: res.status,
+      message: isUp
+        ? `Backend server is responsive (status UP in ${durationMs}ms).`
+        : `Backend responded but reported status: ${data?.status || "UNKNOWN"}.`,
+    }
+  } catch (err: unknown) {
+    const durationMs = Date.now() - startTime
+    if (timedOut) {
+      return {
+        isUp: false,
+        durationMs,
+        status: 0,
+        message: "Health probe timed out. The backend container may still be spinning up.",
+      }
+    }
+    if (err instanceof Error && err.name === "AbortError") {
+      return {
+        isUp: false,
+        durationMs,
+        status: 0,
+        message: "Health check was cancelled.",
+      }
+    }
+    return {
+      isUp: false,
+      durationMs,
+      status: 0,
+      message: "Unable to reach health endpoint. Server may be in cold sleep.",
+    }
+  } finally {
+    if (timerId) clearTimeout(timerId)
+    if (externalSignalCleanup) externalSignalCleanup()
   }
 }

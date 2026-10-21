@@ -2,7 +2,10 @@
 
 import * as React from "react"
 import {
+  Activity,
   AlertCircle,
+  CheckCircle2,
+  Clock,
   Eye,
   EyeOff,
   KeyRound,
@@ -13,6 +16,7 @@ import {
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useAuth } from "@/lib/auth-context"
+import { checkBackendHealth, getApiConfigurationError } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
@@ -65,10 +69,17 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
   const [rememberDevice, setRememberDevice] = React.useState(true)
   const [isSubmitting, setIsSubmitting] = React.useState(false)
   const [warmupPhase, setWarmupPhase] = React.useState<WarmupPhase>("idle")
-  const [error, setError] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(getApiConfigurationError() ?? null)
   const [activeSeedEmail, setActiveSeedEmail] = React.useState<string | null>(null)
+  const [isCheckingHealth, setIsCheckingHealth] = React.useState(false)
+  const [healthStatus, setHealthStatus] = React.useState<{
+    isUp: boolean
+    message: string
+    durationMs?: number
+  } | null>(null)
 
   const abortControllerRef = React.useRef<AbortController | null>(null)
+  const healthAbortRef = React.useRef<AbortController | null>(null)
   const timersRef = React.useRef<ReturnType<typeof setTimeout>[]>([])
 
   const clearTimers = React.useCallback(() => {
@@ -76,7 +87,7 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
     timersRef.current = []
   }, [])
 
-  // Clean up timers and in-flight request when component unmounts
+  // Clean up timers and in-flight requests when component unmounts
   React.useEffect(() => {
     return () => {
       clearTimers()
@@ -84,8 +95,59 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
         abortControllerRef.current.abort()
         abortControllerRef.current = null
       }
+      if (healthAbortRef.current) {
+        healthAbortRef.current.abort()
+        healthAbortRef.current = null
+      }
     }
   }, [clearTimers])
+
+  const handleCheckHealth = async () => {
+    if (isCheckingHealth) return
+
+    const configErr = getApiConfigurationError()
+    if (configErr) {
+      setHealthStatus({
+        isUp: false,
+        message: `Configuration error: ${configErr}`,
+      })
+      return
+    }
+
+    if (healthAbortRef.current) {
+      healthAbortRef.current.abort()
+    }
+    const controller = new AbortController()
+    healthAbortRef.current = controller
+    setIsCheckingHealth(true)
+    setHealthStatus(null)
+
+    try {
+      const result = await checkBackendHealth({
+        signal: controller.signal,
+        timeoutMs: 8000,
+      })
+      if (healthAbortRef.current === controller) {
+        setHealthStatus({
+          isUp: result.isUp,
+          message: result.message,
+          durationMs: result.durationMs,
+        })
+      }
+    } catch {
+      if (healthAbortRef.current === controller) {
+        setHealthStatus({
+          isUp: false,
+          message: "Failed to reach health endpoint. The server may still be booting.",
+        })
+      }
+    } finally {
+      if (healthAbortRef.current === controller) {
+        setIsCheckingHealth(false)
+        healthAbortRef.current = null
+      }
+    }
+  }
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) {
@@ -94,6 +156,19 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
 
     // Prevent duplicate submissions
     if (isSubmitting) return
+
+    const configErr = getApiConfigurationError()
+    if (configErr) {
+      setError(`Application configuration error: ${configErr}`)
+      return
+    }
+
+    // Cancel any active health probe so it cannot conflict with authentication
+    if (healthAbortRef.current) {
+      healthAbortRef.current.abort()
+      healthAbortRef.current = null
+      setIsCheckingHealth(false)
+    }
 
     setError(null)
 
@@ -150,20 +225,24 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
           signal: controller.signal,
         })
       }
-      if (onSuccess) {
+      if (abortControllerRef.current === controller && onSuccess) {
         onSuccess()
       }
     } catch (err: unknown) {
-      if (err instanceof Error) {
-        setError(err.message)
-      } else {
-        setError("Authentication failed. Please verify your credentials.")
+      if (abortControllerRef.current === controller) {
+        if (err instanceof Error) {
+          setError(err.message)
+        } else {
+          setError("Authentication failed. Please verify your credentials.")
+        }
       }
     } finally {
-      clearTimers()
-      abortControllerRef.current = null
-      setIsSubmitting(false)
-      setWarmupPhase("idle")
+      if (abortControllerRef.current === controller) {
+        clearTimers()
+        abortControllerRef.current = null
+        setIsSubmitting(false)
+        setWarmupPhase("idle")
+      }
     }
   }
 
@@ -179,6 +258,7 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
     if (isSubmitting) return
     setMode(newMode)
     setError(null)
+    setHealthStatus(null)
     setActiveSeedEmail(null)
   }
 
@@ -225,14 +305,14 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
         </p>
       </div>
 
-      {/* Error Alert with Explicit Manual Retry */}
+      {/* Error Alert with Explicit Manual Retry and Health Probe */}
       {error && (
         <div
           role="alert"
-          className="mt-4 flex flex-col gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300 animate-in fade-in duration-150"
+          className="mt-4 flex flex-col gap-2.5 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-300 animate-in fade-in duration-150"
         >
           <div className="flex items-start gap-2">
-            <AlertCircle className="size-3.5 shrink-0 text-rose-400 mt-0.5" />
+            <AlertCircle className="size-4 shrink-0 text-rose-400 mt-0.5" />
             <div className="flex-1 text-[11px] leading-relaxed">
               <span className="font-semibold text-rose-200">Sign-in Notice: </span>
               <span>{error}</span>
@@ -241,16 +321,73 @@ export function AuthCard({ onSuccess, isModal = false, initialMode = "signin" }:
           {(error.toLowerCase().includes("waking up") ||
             error.toLowerCase().includes("timed out") ||
             error.toLowerCase().includes("unable to connect") ||
-            error.toLowerCase().includes("try again")) && (
-            <div className="pt-1 flex items-center justify-between border-t border-rose-500/20">
-              <span className="text-[10px] text-rose-300/70">Server may now be ready</span>
-              <button
-                type="button"
-                onClick={() => handleSubmit()}
-                className="text-[11px] font-medium text-amber-300 hover:text-amber-200 underline cursor-pointer"
-              >
-                Retry {mode === "register" ? "Registration" : "Sign In"}
-              </button>
+            error.toLowerCase().includes("try again") ||
+            error.toLowerCase().includes("starting from sleep")) && (
+            <div className="pt-2 flex flex-col gap-2 border-t border-rose-500/20">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] text-rose-300/80">
+                  Render free tier instances take ~60–90s to cold-start.
+                </span>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    disabled={isCheckingHealth || isSubmitting}
+                    onClick={handleCheckHealth}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-indigo-300 hover:text-indigo-200 underline cursor-pointer disabled:opacity-50"
+                  >
+                    {isCheckingHealth ? (
+                      <>
+                        <Loader2 className="size-3 animate-spin" />
+                        <span>Checking…</span>
+                      </>
+                    ) : (
+                      <>
+                        <Activity className="size-3" />
+                        <span>Check Status</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => handleSubmit()}
+                    className="text-[11px] font-medium text-amber-300 hover:text-amber-200 underline cursor-pointer disabled:opacity-50"
+                  >
+                    Retry {mode === "register" ? "Registration" : "Sign In"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Health Probe Diagnostic Feedback */}
+              {healthStatus && (
+                <div
+                  className={cn(
+                    "rounded border p-2 text-[10px] leading-relaxed transition-all",
+                    healthStatus.isUp
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200"
+                      : "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                  )}
+                >
+                  <div className="font-semibold flex items-center gap-1.5">
+                    {healthStatus.isUp ? (
+                      <>
+                        <CheckCircle2 className="size-3 text-emerald-400" />
+                        <span>Server is online ({healthStatus.durationMs}ms)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Clock className="size-3 text-amber-400" />
+                        <span>Server still warming up</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[10px] opacity-90">
+                    {healthStatus.isUp
+                      ? "The health endpoint responded. (Note: A responsive health endpoint indicates the JVM is running, though database authentication is verified separately during sign in.) You may now click 'Retry Sign In'."
+                      : "The health endpoint did not respond yet. The container is likely completing initial cold boot. Please wait 15–30 seconds and check again."}
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>
